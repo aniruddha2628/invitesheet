@@ -1,0 +1,53 @@
+@import './fonts.css';
+@import './tailwind.css';
+@import './theme.css';
+
+.ag-header-cell-centered .ag-header-cell-label {
+  justify-content: center;
+  text-align: center;
+}
+
+/* Hide ALL scrollbars inside AG Grid except the dedicated horizontal one */
+.ag-root-wrapper *::-webkit-scrollbar {
+  display: none;
+}
+.ag-root-wrapper * {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+/* Re-enable only the dedicated horizontal scroll bar */
+.ag-body-horizontal-scroll-viewport {
+  scrollbar-width: thin !important;
+  -ms-overflow-style: auto !important;
+}
+.ag-body-horizontal-scroll-viewport::-webkit-scrollbar {
+  display: block !important;
+  height: 8px;
+}
+.ag-body-horizontal-scroll-viewport::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+}
+.ag-body-horizontal-scroll-viewport::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+.ag-body-horizontal-scroll-viewport::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Tailwind v4 doesn't set an explicit text color on inputs — they inherit
+   from their parent. Force a safe dark fallback so text is always visible
+   regardless of what colour the surrounding context uses. */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]) {
+  color: var(--foreground, #111827);
+}
