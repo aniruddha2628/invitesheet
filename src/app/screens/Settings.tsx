@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router";
+import api from "@/lib/api";
 import { Sidebar, Topbar } from "./Dashboard";
 import { Field, PasswordField, PrimaryButton, PasswordStrength, Alert, cn, passwordValidity } from "./_shared";
 import { CheckCircle2, Download, AlertTriangle, Lock, ShieldAlert, Upload } from "lucide-react";
@@ -8,7 +10,8 @@ type Tab = "profile" | "password" | "company";
 
 const DELETE_PHRASE = "DELETE MY ACCOUNT";
 
-export default function Settings({ onNav, role = "owner" }: { onNav?: (s: string) => void; role?: Role }) {
+export default function Settings({ role = "owner" }: { role?: Role }) {
+  const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("profile");
   const [profile, setProfile] = useState({ fullName: "Priya Sharma", email: "priya@acmeevents.in", phone: "9876543210" });
   const [company, setCompany] = useState({ companyName: "Acme Events Pvt Ltd", city: "Gurgaon", whatsappNumber: "9988776655" });
@@ -21,26 +24,71 @@ export default function Settings({ onNav, role = "owner" }: { onNav?: (s: string
   const canEditCompany = role === "owner" || role === "admin";
   const canDelete = role === "owner";
 
+  useEffect(() => {
+    api.get("/users/me").then((res) => {
+      const me = res.data.data;
+      setProfile({ fullName: me.fullName, email: me.email, phone: me.phone });
+      if (me.company) {
+        setCompany({ companyName: me.company.name ?? "", city: me.company.city ?? "", whatsappNumber: me.company.whatsappNumber ?? "" });
+      }
+    }).catch(() => undefined);
+  }, []);
+
+  const saveProfile = async () => {
+    const res = await api.patch("/users/me", { fullName: profile.fullName, phone: profile.phone });
+    setProfile((p) => ({ ...p, fullName: res.data.data.fullName, phone: res.data.data.phone }));
+  };
+
+  const saveCompany = async () => {
+    const form = new FormData();
+    form.append("name", company.companyName);
+    form.append("city", company.city);
+    form.append("whatsappNumber", company.whatsappNumber);
+    const res = await api.patch("/company", form);
+    setCompany({ companyName: res.data.data.name, city: res.data.data.city, whatsappNumber: res.data.data.whatsappNumber });
+  };
+
+  const exportData = async () => {
+    const res = await api.get("/users/me/export");
+    const blob = new Blob([JSON.stringify(res.data.data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "invitesheet-data-export.json";
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const deleteAccount = async () => {
+    await api.delete("/users/me", { data: { confirmText: deleteText } });
+    localStorage.removeItem("token");
+    navigate("/login");
+  };
+
   const items: { id: Tab; label: string; show: boolean }[] = [
     { id: "profile", label: "Profile", show: true },
     { id: "password", label: "Password", show: true },
     { id: "company", label: "Company", show: true },
   ];
 
-  const submitPw = (e: React.FormEvent) => {
+  const submitPw = async (e: React.FormEvent) => {
     e.preventDefault();
     setPwErr(null); setPwSuccess(false);
-    if (pw.current === "wrong") { setPwErr("Current password is incorrect."); return; }
     if (pw.next !== pw.confirm) { setPwErr("Passwords do not match"); return; }
-    setPwSuccess(true);
-    setPw({ current: "", next: "", confirm: "" });
+    try {
+      await api.patch("/users/me/password", pw);
+      setPwSuccess(true);
+      setPw({ current: "", next: "", confirm: "" });
+    } catch (error: any) {
+      setPwErr(error.response?.data?.error?.message ?? "Unable to update password.");
+    }
   };
 
   return (
     <div className="flex h-screen bg-gray-50 font-sans overflow-hidden">
-      <Sidebar active="settings" onNav={onNav} />
+      <Sidebar active="settings" />
       <div className="flex-1 flex flex-col min-w-0">
-        <Topbar role={role} onNav={onNav} />
+        <Topbar role={role} />
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
           <div className="max-w-3xl mx-auto">
             <div className="mb-6">
@@ -84,7 +132,7 @@ export default function Settings({ onNav, role = "owner" }: { onNav?: (s: string
                     onChange={(v) => setProfile(p => ({ ...p, phone: v.replace(/[^0-9]/g, "").slice(0, 10) }))}
                     prefix="+91"
                   />
-                  <div className="pt-2"><PrimaryButton full={false}>Save Changes</PrimaryButton></div>
+                  <div className="pt-2"><PrimaryButton full={false} onClick={saveProfile}>Save Changes</PrimaryButton></div>
                 </Section>
               )}
 
@@ -117,7 +165,7 @@ export default function Settings({ onNav, role = "owner" }: { onNav?: (s: string
                           <p className="text-xs text-gray-500">Ready in ~30 seconds, emailed to you.</p>
                         </div>
                       </div>
-                      <PrimaryButton full={false}>Export Data</PrimaryButton>
+                      <PrimaryButton full={false} onClick={exportData}>Export Data</PrimaryButton>
                     </div>
                   </Section>
 
@@ -151,6 +199,7 @@ export default function Settings({ onNav, role = "owner" }: { onNav?: (s: string
                             </button>
                             <button
                               disabled={deleteText !== DELETE_PHRASE}
+                              onClick={deleteAccount}
                               className="px-4 py-2.5 bg-red-600 text-white text-sm font-semibold rounded-lg hover:bg-red-700 transition-all shadow-sm disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed disabled:shadow-none"
                             >
                               Permanently Delete Account
@@ -195,7 +244,7 @@ export default function Settings({ onNav, role = "owner" }: { onNav?: (s: string
                       prefix="+91"
                     />
                     {canEditCompany && (
-                      <div className="pt-2"><PrimaryButton full={false}>Save Changes</PrimaryButton></div>
+                      <div className="pt-2"><PrimaryButton full={false} onClick={saveCompany}>Save Changes</PrimaryButton></div>
                     )}
                   </Section>
 

@@ -1,17 +1,35 @@
 import { useRef, useState } from "react";
+import { useNavigate } from "react-router";
+import api from "@/lib/api";
 import { Logo, Field, PrimaryButton, SecondaryButton, cn } from "./_shared";
 import { ClipboardList, Users, MessageSquare, Building2, ArrowRight, Image as ImageIcon, X } from "lucide-react";
 
 type Step = 0 | 1;
 const TOTAL = 2;
 
-export default function Onboarding({ onNav, companyName = "Acme Events Pvt Ltd" }: { onNav?: (s: string) => void; companyName?: string }) {
+export default function Onboarding({ companyName = sessionStorage.getItem("pendingCompany") || "Acme Events Pvt Ltd" }: { companyName?: string }) {
+  const navigate = useNavigate();
   const [step, setStep] = useState<Step>(0);
   const [company, setCompany] = useState({ name: companyName, city: "", whatsapp: "", logoUrl: "" as string });
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [saving, setSaving] = useState(false);
   const logoRef = useRef<HTMLInputElement>(null);
 
-  const skip = () => onNav?.("dashboard");
-  const finish = () => onNav?.("dashboard");
+  const skip = () => navigate("/dashboard");
+  const finish = async () => {
+    setSaving(true);
+    try {
+      const form = new FormData();
+      form.append("name", company.name);
+      form.append("city", company.city);
+      form.append("whatsapp", company.whatsapp);
+      if (logoFile) form.append("logo", logoFile);
+      await api.post("/auth/onboarding", form);
+      navigate("/dashboard");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="min-h-screen w-full bg-gradient-to-br from-emerald-50/40 via-white to-gray-50 font-sans flex flex-col">
@@ -104,7 +122,10 @@ export default function Onboarding({ onNav, companyName = "Acme Events Pvt Ltd" 
                       className="hidden"
                       onChange={(e) => {
                         const file = e.target.files?.[0];
-                        if (file) setCompany(c => ({ ...c, logoUrl: URL.createObjectURL(file) }));
+                        if (file) {
+                          setLogoFile(file);
+                          setCompany(c => ({ ...c, logoUrl: URL.createObjectURL(file) }));
+                        }
                       }}
                     />
                   </div>
@@ -129,8 +150,8 @@ export default function Onboarding({ onNav, companyName = "Acme Events Pvt Ltd" 
 
                 <div className="mt-7 flex gap-2">
                   <SecondaryButton onClick={skip}>Skip for now</SecondaryButton>
-                  <PrimaryButton onClick={finish} disabled={!company.name || !company.city || !/^[6-9]\d{9}$/.test(company.whatsapp)}>
-                    Finish Setup <ArrowRight className="w-4 h-4 inline -mt-0.5 ml-1" />
+                  <PrimaryButton onClick={finish} disabled={saving || !company.name || !company.city || !/^[6-9]\d{9}$/.test(company.whatsapp)}>
+                    {saving ? "Saving..." : "Finish Setup"} <ArrowRight className="w-4 h-4 inline -mt-0.5 ml-1" />
                   </PrimaryButton>
                 </div>
               </div>

@@ -1,26 +1,29 @@
 import { useState } from "react";
+import { useNavigate } from "react-router";
+import api from "@/lib/api";
 import { AuthShell, Field, PasswordField, PrimaryButton, LinkText, Alert } from "./_shared";
 
-export default function Login({ onNav }: { onNav?: (s: string) => void }) {
+export default function Login() {
+  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
   const [err, setErr] = useState<string | null>(null);
-  const submitting = false;
+  const [submitting, setSubmitting] = useState(false);
   const isValid = /\S+@\S+\.\S+/.test(email) && pw.length > 0;
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr(null);
-    // Demo: any creds → dashboard. Wire to POST /auth/login.
-    if (email === "locked@example.com") {
-      setErr("Account locked after too many failed attempts. Try again in 15 minutes.");
-      return;
+    setSubmitting(true);
+    try {
+      const res = await api.post("/auth/login", { email, password: pw });
+      localStorage.setItem("token", res.data.data.accessToken);
+      navigate(res.data.data.user?.onboardingComplete ? "/dashboard" : "/onboarding");
+    } catch (error: any) {
+      setErr(error.response?.data?.error?.message ?? "Unable to sign in. Please try again.");
+    } finally {
+      setSubmitting(false);
     }
-    if (email === "unverified@example.com") {
-      setErr("Please verify your email before logging in.");
-      return;
-    }
-    onNav?.("dashboard");
   };
 
   return (
@@ -35,16 +38,16 @@ export default function Login({ onNav }: { onNav?: (s: string) => void }) {
         <PasswordField label="Password" value={pw} onChange={setPw} placeholder="Your password" autoComplete="current-password" />
 
         <div className="flex justify-end">
-          <LinkText onClick={() => onNav?.("forgot")}>Forgot password?</LinkText>
+          <LinkText onClick={() => navigate("/forgot-password")}>Forgot password?</LinkText>
         </div>
 
         <PrimaryButton type="submit" disabled={!isValid || submitting}>
-          {submitting ? "Signing in…" : "Sign In"}
+          {submitting ? "Signing in..." : "Sign In"}
         </PrimaryButton>
       </form>
 
       <p className="text-sm text-gray-500 text-center mt-6">
-        Don't have an account? <LinkText onClick={() => onNav?.("register")}>Create account</LinkText>
+        Don't have an account? <LinkText onClick={() => navigate("/register")}>Create account</LinkText>
       </p>
     </AuthShell>
   );

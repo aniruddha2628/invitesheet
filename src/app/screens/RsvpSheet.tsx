@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect, useImperativeHandle } from "react";
+import { useLocation, useNavigate, useParams } from "react-router";
 import { AgGridReact } from "ag-grid-react";
 import { 
   AllCommunityModule,
@@ -8,6 +9,7 @@ import {
   RowClassParams,
   ICellRendererParams,
   CellValueChangedEvent,
+  GetRowIdParams,
   themeQuartz
 } from "ag-grid-community";
 
@@ -54,9 +56,9 @@ import {
 } from "lucide-react";
 import { Toaster, toast } from "sonner";
 import * as ContextMenu from "@radix-ui/react-context-menu";
-import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
+import api from "@/lib/api";
 import { Logo } from "./_shared";
+import { cn } from "@/lib/utils";
 
 // --- Registry & Theme Setup ---
 ModuleRegistry.registerModules([AllCommunityModule]);
@@ -73,16 +75,13 @@ const CleanGrid = React.forwardRef<AgGridReact, any>((props, ref) => {
 });
 CleanGrid.displayName = "CleanGrid";
 
-function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
-
 // --- Types ---
 type GuestStatus = "Confirmed" | "Not Coming" | "VIP" | "Dont Call" | "Wrong Number" | "Pending";
 type IDType = "Aadhaar" | "Passport" | "Voter ID" | "Driving Licence" | "Other" | "Pending";
 type TravelType = "By Train" | "By Flight" | "By Car" | "By Bus" | "Not Decided";
 
 interface Guest {
+  _id?: string;
   id: string;
   srNo: number;
   name: string;
@@ -152,7 +151,7 @@ const CheckInRenderer = (params: ICellRendererParams) => {
     const performToggle = () => {
       const newValue = !checked;
       setChecked(newValue);
-      params.setValue(newValue);
+      params.setValue?.(newValue);
       toast.success(`${params.data.name} ${newValue ? 'checked in' : 'checked out'}`);
     };
 
@@ -186,16 +185,22 @@ const CheckInRenderer = (params: ICellRendererParams) => {
 // --- Main App Component ---
 
 export default function RsvpSheet({
-  onNav,
   eventType = "Wedding",
   eventId = "demo-event-123",
   eventName = "Event"
 }: {
-  onNav?: (s: string) => void;
   eventType?: string;
   eventId?: string;
   eventName?: string;
 }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const params = useParams();
+  const routeState = location.state as { eventType?: string; eventName?: string } | null;
+  const activeEventType = routeState?.eventType ?? eventType;
+  const activeEventId = params.eventId ?? eventId;
+  const activeEventName = routeState?.eventName ?? eventName;
+
   // Determine initial sheets based on event type
   const getInitialSheets = (type: string): string[] => {
     const normalizedType = type.toLowerCase();
@@ -206,7 +211,7 @@ export default function RsvpSheet({
     return ["Sheet1"];
   };
 
-  const INITIAL_RSVP_SHEETS = getInitialSheets(eventType);
+  const INITIAL_RSVP_SHEETS = getInitialSheets(activeEventType);
 
   const rsvpColumns: ColumnMeta[] = useMemo(() => [
     { field: "srNo", headerName: "Sr No", width: 60, minWidth: 60, resizable: false, editable: false, pinned: "left", locked: true },
@@ -246,6 +251,8 @@ export default function RsvpSheet({
     return m;
   });
   const [currentTab, setCurrentTab] = useState(INITIAL_RSVP_SHEETS[0]);
+  const [sheetIdByName, setSheetIdByName] = useState<Record<string, string>>({});
+  const [isHydrated, setIsHydrated] = useState(false);
   const [lastActiveSheetId, setLastActiveSheetId] = useState<string | null>(null);
   const [addSheetName, setAddSheetName] = useState<string | null>(null);
   const isRsvpSheet = (sheetTypes[currentTab] ?? "rsvp") === "rsvp";
@@ -257,6 +264,41 @@ export default function RsvpSheet({
       return { ...prev, [currentTab]: next };
     });
   }, [currentTab]);
+  const hasBackendEvent = /^[a-f\d]{24}$/i.test(activeEventId);
+  const normalizeGuest = useCallback((guest: any, index: number): Guest => ({
+    _id: guest._id,
+    id: guest._id || guest.id || `${guest.sheetId || "row"}-${index}`,
+    srNo: guest.srNo ?? index + 1,
+    name: guest.name ?? "",
+    contact: guest.contact ?? "",
+    checkIn: !!guest.checkIn,
+    status: (guest.status || "") as GuestStatus,
+    idType: (guest.idType || "") as IDType,
+    pax: guest.pax ?? (null as unknown as number),
+    roomNo: guest.roomNo ?? "",
+    travel: (guest.travel || "") as TravelType,
+    arrival: guest.arrival ?? "",
+    departure: guest.departure ?? "",
+    comments: guest.comments ?? "",
+  }), []);
+  const filledForSync = useCallback((rows: Guest[]) => rows
+    .filter(g => (g.name && g.name.trim()) || (g.contact && g.contact.trim()))
+    .map((g, index) => ({
+      _id: g._id,
+      id: g._id,
+      srNo: index + 1,
+      name: g.name || "",
+      contact: g.contact || "",
+      checkIn: !!g.checkIn,
+      status: g.status || "Pending",
+      idType: g.idType || "Pending",
+      pax: g.pax || 1,
+      roomNo: g.roomNo || "",
+      travel: g.travel || "Not Decided",
+      arrival: g.arrival || "",
+      departure: g.departure || "",
+      comments: g.comments || "",
+    })), []);
   const openAddSheet = useCallback(() => {
     setAddSheetName("");
   }, []);
@@ -267,6 +309,11 @@ export default function RsvpSheet({
       let name = raw;
       let i = 2;
       while (prev.includes(name)) { name = `${raw} ${i}`; i++; }
+      if (hasBackendEvent) {
+        api.post(`/events/${activeEventId}/sheets`, { name }).then((res) => {
+          setSheetIdByName(ids => ({ ...ids, [name]: res.data.data._id }));
+        }).catch(() => undefined);
+      }
       setSheets(s => ({ ...s, [name]: makeBlankSheet(name.toLowerCase().replace(/\s/g, "-")) }));
       setSheetTypes(t => ({ ...t, [name]: "custom" }));
       setAllColumns(c => ({ ...c, [name]: customColumns }));
@@ -274,7 +321,7 @@ export default function RsvpSheet({
       return [...prev, name];
     });
     setAddSheetName(null);
-  }, [addSheetName, customColumns]);
+  }, [activeEventId, addSheetName, customColumns, hasBackendEvent]);
 
   const [hiddenSheets, setHiddenSheets] = useState<string[]>([]);
   const [tabMenu, setTabMenu] = useState<{ x: number; y: number; tab: string } | null>(null);
@@ -327,6 +374,10 @@ export default function RsvpSheet({
     });
   };
   const deleteSheet = (tab: string) => {
+    const sheetId = sheetIdByName[tab];
+    if (hasBackendEvent && sheetId) {
+      api.delete(`/events/${activeEventId}/sheets/${sheetId}`).catch(() => undefined);
+    }
     setSheetOrder(prev => {
       if (prev.length <= 1) return prev;
       const next = prev.filter(t => t !== tab);
@@ -334,6 +385,7 @@ export default function RsvpSheet({
       setSheetTypes(t => { const c = { ...t }; delete c[tab]; return c; });
       setAllColumns(c => { const n = { ...c }; delete n[tab]; return n; });
       setAllHiddenColumns(c => { const n = { ...c }; delete n[tab]; return n; });
+      setSheetIdByName(ids => { const n = { ...ids }; delete n[tab]; return n; });
       if (currentTab === tab) setCurrentTab(next[0]);
       return next;
     });
@@ -341,21 +393,37 @@ export default function RsvpSheet({
     setDeleteConfirm(null);
   };
   const hideSheet = (tab: string) => {
+    const sheetId = sheetIdByName[tab];
+    if (hasBackendEvent && sheetId) {
+      api.patch(`/events/${activeEventId}/sheets/${sheetId}`, { isHidden: true }).catch(() => undefined);
+    }
     setHiddenSheets(h => h.includes(tab) ? h : [...h, tab]);
     const visible = sheetOrder.filter(t => t !== tab && !hiddenSheets.includes(t));
     if (currentTab === tab && visible[0]) setCurrentTab(visible[0]);
   };
-  const unhideSheet = (tab: string) => setHiddenSheets(h => h.filter(t => t !== tab));
+  const unhideSheet = (tab: string) => {
+    const sheetId = sheetIdByName[tab];
+    if (hasBackendEvent && sheetId) {
+      api.patch(`/events/${activeEventId}/sheets/${sheetId}`, { isHidden: false }).catch(() => undefined);
+    }
+    setHiddenSheets(h => h.filter(t => t !== tab));
+  };
   const startRename = (tab: string) => { setRenamingTab(tab); setRenameValue(tab); };
   const commitRename = () => {
     if (!renamingTab) return;
     const trimmed = renameValue.trim();
     if (!trimmed || trimmed === renamingTab || sheetOrder.includes(trimmed)) { setRenamingTab(null); return; }
+    const previousName = renamingTab;
+    const sheetId = sheetIdByName[previousName];
+    if (hasBackendEvent && sheetId) {
+      api.patch(`/events/${activeEventId}/sheets/${sheetId}`, { name: trimmed }).catch(() => undefined);
+    }
     setSheetOrder(prev => prev.map(t => t === renamingTab ? trimmed : t));
     setSheets(prev => { const c: Record<string, Guest[]> = {}; for (const k in prev) c[k === renamingTab ? trimmed : k] = prev[k]; return c; });
     setSheetTypes(prev => { const c: Record<string, "rsvp" | "custom"> = {}; for (const k in prev) c[k === renamingTab ? trimmed : k] = prev[k]; return c; });
     setAllColumns(prev => { const c: Record<string, ColumnMeta[]> = {}; for (const k in prev) c[k === renamingTab ? trimmed : k] = prev[k]; return c; });
     setAllHiddenColumns(prev => { const c: Record<string, string[]> = {}; for (const k in prev) c[k === renamingTab ? trimmed : k] = prev[k]; return c; });
+    setSheetIdByName(prev => { const c: Record<string, string> = {}; for (const k in prev) c[k === previousName ? trimmed : k] = prev[k]; return c; });
     setHiddenSheets(prev => prev.map(t => t === renamingTab ? trimmed : t));
     if (currentTab === renamingTab) setCurrentTab(trimmed);
     setRenamingTab(null);
@@ -370,6 +438,7 @@ export default function RsvpSheet({
   const [smsMessage, setSmsMessage] = useState("");
   const [smsRecipientType, setSmsRecipientType] = useState("all-sheets");
   const [smsResult, setSmsResult] = useState<{ sent: number; failed: number; skipped: number; failedNames: string[] } | null>(null);
+  const [smsPreview, setSmsPreview] = useState<{ totalRecipients: number; validNumbers: number; skipped: number; estimatedSmsCount: number } | null>(null);
   const [isSendingSms, setIsSendingSms] = useState(false);
   const [showIdBanner, setShowIdBanner] = useState(true);
   const [showCheckinBanner, setShowCheckinBanner] = useState(false);
@@ -455,6 +524,57 @@ export default function RsvpSheet({
   const [rowMenu, setRowMenu] = useState<{ x: number; y: number; ids: string[] } | null>(null);
   const [rowPasteSpecialOpen, setRowPasteSpecialOpen] = useState(false);
   const rowClipboardRef = useRef<{ rows: Guest[]; mode: "copy" | "cut" } | null>(null);
+
+  useEffect(() => {
+    if (!hasBackendEvent) {
+      setIsHydrated(true);
+      return;
+    }
+    let alive = true;
+    api.get(`/events/${activeEventId}/sheets`, { params: { includeHidden: true } }).then((res) => {
+      if (!alive) return;
+      const backendSheets = res.data.data as any[];
+      if (backendSheets.length === 0) return;
+      const nextSheets: Record<string, Guest[]> = {};
+      const nextTypes: Record<string, "rsvp" | "custom"> = {};
+      const nextIds: Record<string, string> = {};
+      const nextHidden: string[] = [];
+      backendSheets.forEach((sheet) => {
+        nextIds[sheet.name] = sheet._id;
+        nextTypes[sheet.name] = ["Groom Side", "Bride Side", "Friends", "Sheet1"].includes(sheet.name) ? "rsvp" : "custom";
+        if (sheet.isHidden) nextHidden.push(sheet.name);
+        const guests = (sheet.guests || []).map(normalizeGuest);
+        nextSheets[sheet.name] = guests.length > 0 ? guests : makeBlankSheet(sheet.name.toLowerCase().replace(/\s/g, "-"));
+      });
+      const order = backendSheets.map((sheet) => sheet.name);
+      setSheetIdByName(nextIds);
+      setSheets(nextSheets);
+      setSheetTypes(nextTypes);
+      setHiddenSheets(nextHidden);
+      setSheetOrder(order);
+      setCurrentTab(order[0]);
+      setIsHydrated(true);
+    }).catch(() => {
+      setIsHydrated(true);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [activeEventId, hasBackendEvent, normalizeGuest]);
+
+  useEffect(() => {
+    if (!isHydrated || !hasBackendEvent) return;
+    const sheetId = sheetIdByName[currentTab];
+    if (!sheetId) return;
+    const rows = filledForSync(rowData);
+    const t = window.setTimeout(() => {
+      api.post(`/events/${activeEventId}/sheets/${sheetId}/guests/bulk`, {
+        operation: "replace",
+        guests: rows,
+      }).catch(() => undefined);
+    }, 800);
+    return () => window.clearTimeout(t);
+  }, [activeEventId, currentTab, filledForSync, hasBackendEvent, isHydrated, rowData, sheetIdByName]);
 
   const visibleRowData = useMemo(
     () => rowData.filter(r => !hiddenRows.includes(r.id)),
@@ -1059,38 +1179,41 @@ export default function RsvpSheet({
     });
   }, [currentTab, lastActiveSheetId, sheets]);
 
+  useEffect(() => {
+    if (!showSmsModal || !hasBackendEvent || smsRecipientType === "selected-rows") {
+      setSmsPreview(null);
+      return;
+    }
+    api.get(`/events/${activeEventId}/sms/preview`, { params: { recipientType: smsRecipientType } })
+      .then((res) => setSmsPreview(res.data.data))
+      .catch(() => setSmsPreview(null));
+  }, [activeEventId, hasBackendEvent, showSmsModal, smsRecipientType]);
+
   // SMS send handler
   const handleSendSms = async () => {
     setIsSendingSms(true);
-
-    // Simulate SMS sending with a realistic delay
-    await new Promise(resolve => setTimeout(resolve, 1500));
-
-    // Mock result
-    const totalRecipients = getRecipientCount();
-    const result = {
-      sent: Math.floor(totalRecipients * 0.95),
-      failed: 8,
-      skipped: 4,
-      failedNames: ["Rahul Sharma", "Priya Joshi", "Anita Verma", "Raj Malhotra", "Deepa Singh", "Amit Kumar", "Neha Patel", "Vikram Rao"]
-    };
-
-    setSmsResult(result);
-    setIsSendingSms(false);
-
-    // Small delay for smooth transition
-    await new Promise(resolve => setTimeout(resolve, 100));
-
-    setShowSmsModal(false);
-
-    // Another small delay before showing result
-    await new Promise(resolve => setTimeout(resolve, 150));
-
-    setShowSmsResult(true);
-    setSmsMessage("");
+    try {
+      const selectedGuestIds = selectedRowIds
+        .map(id => rsvpAggregateRows.find(g => g.id === id)?._id)
+        .filter((id): id is string => !!id);
+      const res = await api.post(`/events/${activeEventId}/sms`, {
+        recipientType: smsRecipientType,
+        message: smsMessage,
+        selectedGuestIds,
+      });
+      setSmsResult(res.data.data);
+      setShowSmsModal(false);
+      setShowSmsResult(true);
+      setSmsMessage("");
+    } catch {
+      toast.error("SMS failed, please try again");
+    } finally {
+      setIsSendingSms(false);
+    }
   };
 
   const getRecipientCount = () => {
+    if (smsPreview) return smsPreview.totalRecipients;
     const counts: Record<string, number> = {
       "all-sheets": 487,
       "groom-side": 187,
@@ -1106,11 +1229,13 @@ export default function RsvpSheet({
   };
 
   const getInvalidCount = () => {
+    if (smsPreview) return smsPreview.skipped;
     // Mock: ~2-3% invalid numbers
     return Math.floor(getRecipientCount() * 0.025);
   };
 
   const getValidCount = () => {
+    if (smsPreview) return smsPreview.validNumbers;
     return getRecipientCount() - getInvalidCount();
   };
 
@@ -1125,28 +1250,14 @@ export default function RsvpSheet({
   const handleExport = async () => {
     setIsExporting(true);
     try {
-      // Get auth token (would typically come from auth context/localStorage)
-      const authToken = localStorage.getItem("authToken") || "demo-token";
-
-      const response = await fetch(`/api/events/${eventId}/export`, {
-        method: "GET",
-        headers: {
-          "Authorization": `Bearer ${authToken}`,
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error("Export failed");
-      }
-
-      const blob = await response.blob();
+      const response = await api.get(`/events/${activeEventId}/export`, { responseType: "blob" });
+      const blob = response.data;
       const url = window.URL.createObjectURL(new Blob([blob], {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
       }));
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${eventName}.xlsx`;
+      a.download = `${activeEventName}.xlsx`;
       a.click();
       window.URL.revokeObjectURL(url);
     } catch (error) {
@@ -1163,7 +1274,7 @@ export default function RsvpSheet({
       {/* Zone 1 — Navbar */}
       <header className="flex items-center justify-between px-6 py-3 border-b border-gray-100 bg-white z-50">
         <div className="flex items-center gap-6">
-          <Logo onClick={() => onNav?.("dashboard")} />
+          <Logo onClick={() => navigate("/dashboard")} />
           <div className="h-6 w-px bg-gray-200" />
           <h1 className="text-base font-semibold text-gray-800">Ritika & Yash Wedding</h1>
         </div>
@@ -1341,7 +1452,7 @@ export default function RsvpSheet({
               onCellValueChanged={onCellValueChanged}
               onCellClicked={onCellClicked}
               onCellContextMenu={onCellContextMenu}
-              getRowId={(params) => params.data.id}
+              getRowId={(params: GetRowIdParams<Guest>) => params.data.id}
               maintainColumnOrder={true}
               suppressColumnVirtualisation={false}
               enterNavigatesVertically={true}

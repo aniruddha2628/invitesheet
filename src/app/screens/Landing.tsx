@@ -1,4 +1,5 @@
 import React from "react";
+import { useNavigate } from "react-router";
 import {
   ArrowRight,
   CheckCircle2,
@@ -23,9 +24,9 @@ import {
 import { Logo, cn } from "./_shared";
 import { motion } from "motion/react";
 
-type Props = { onNav: (s: string) => void };
+type Props = { navigateTo: (s: string) => void };
 
-function Nav({ onNav }: Props) {
+function Nav({ navigateTo }: Props) {
   return (
     <header className="fixed top-0 inset-x-0 z-50 bg-gray-950/80 backdrop-blur-md border-b border-white/10">
       <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
@@ -36,11 +37,11 @@ function Nav({ onNav }: Props) {
           <a href="#pricing" className="hover:text-white transition-colors">Pricing</a>
         </nav>
         <div className="flex items-center gap-4">
-          <button onClick={() => onNav("login")} className="text-sm font-medium text-gray-300 hover:text-white transition-colors">
+          <button onClick={() => navigateTo("login")} className="text-sm font-medium text-gray-300 hover:text-white transition-colors">
             Log in
           </button>
           <button
-            onClick={() => onNav("register")}
+            onClick={() => navigateTo("register")}
             className="px-4 py-2 bg-primary text-white text-sm font-semibold rounded-lg hover:bg-primary/90 transition-all shadow-sm shadow-primary/20"
           >
             Start Free
@@ -176,7 +177,7 @@ function HeroMockup() {
   );
 }
 
-function Hero({ onNav }: Props) {
+function Hero({ navigateTo }: Props) {
   return (
     <section className="relative pt-32 pb-10 lg:pt-40 lg:pb-20 overflow-hidden bg-gray-950">
       {/* Background Glows */}
@@ -204,7 +205,7 @@ function Hero({ onNav }: Props) {
           </p>
           <div className="mt-10 flex flex-col sm:flex-row gap-4 justify-center items-center">
             <button
-              onClick={() => onNav("register")}
+              onClick={() => navigateTo("register")}
               className="px-8 py-4 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 transition-all shadow-[0_0_30px_-5px_rgba(22,163,74,0.5)] flex items-center gap-2 w-full sm:w-auto justify-center text-lg"
             >
               Start Your Free Event <ArrowRight className="w-5 h-5" />
@@ -475,7 +476,7 @@ function ScaleSection() {
   );
 }
 
-function Pricing({ onNav }: Props) {
+function Pricing({ navigateTo }: Props) {
   return (
     <section id="pricing" className="py-24 bg-gray-50">
       <div className="max-w-7xl mx-auto px-6">
@@ -501,7 +502,7 @@ function Pricing({ onNav }: Props) {
               ))}
             </ul>
             <button
-              onClick={() => onNav("register")}
+              onClick={() => navigateTo("register")}
               className="w-full py-4 rounded-xl font-bold text-gray-900 bg-gray-50 hover:bg-gray-100 border border-gray-200 transition-colors"
             >
               Start Free
@@ -537,7 +538,7 @@ function Pricing({ onNav }: Props) {
               ))}
             </ul>
             <button
-              onClick={() => onNav("register")}
+              onClick={() => navigateTo("register")}
               className="w-full py-4 rounded-xl font-bold text-white bg-primary hover:bg-primary/90 transition-colors shadow-[0_0_20px_rgba(22,163,74,0.4)]"
             >
               Start 14-Day Free Trial
@@ -549,7 +550,7 @@ function Pricing({ onNav }: Props) {
   );
 }
 
-function Footer({ onNav }: Props) {
+function Footer({ navigateTo }: Props) {
   return (
     <footer className="bg-white border-t border-gray-200 pt-16 pb-8">
       <div className="max-w-7xl mx-auto px-6">
@@ -571,8 +572,8 @@ function Footer({ onNav }: Props) {
           <div>
             <h4 className="font-semibold text-gray-900 mb-4">Company</h4>
             <ul className="space-y-3">
-              <li><button onClick={() => onNav("login")} className="text-sm text-gray-500 hover:text-gray-900 transition-colors">Login</button></li>
-              <li><button onClick={() => onNav("register")} className="text-sm text-gray-500 hover:text-gray-900 transition-colors">Register</button></li>
+              <li><button onClick={() => navigateTo("login")} className="text-sm text-gray-500 hover:text-gray-900 transition-colors">Login</button></li>
+              <li><button onClick={() => navigateTo("register")} className="text-sm text-gray-500 hover:text-gray-900 transition-colors">Register</button></li>
               <li><a href="#" className="text-sm text-gray-500 hover:text-gray-900 transition-colors">Contact Support</a></li>
             </ul>
           </div>
@@ -588,15 +589,18 @@ function Footer({ onNav }: Props) {
   );
 }
 
-export default function Landing({ onNav }: Props) {
+export default function Landing() {
+  const navigate = useNavigate();
+  const nav = (screen: string) => navigate(screen === "login" || screen === "register" ? `/${screen}` : "/");
+
   return (
     <div className="min-h-screen bg-white font-sans selection:bg-primary/20">
-      <Nav onNav={onNav} />
-      <Hero onNav={onNav} />
+      <Nav navigateTo={nav} />
+      <Hero navigateTo={nav} />
       <BentoFeatures />
       <ScaleSection />
-      <Pricing onNav={onNav} />
-      <Footer onNav={onNav} />
+      <Pricing navigateTo={nav} />
+      <Footer navigateTo={nav} />
     </div>
   );
 }

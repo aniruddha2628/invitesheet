@@ -1,0 +1,133 @@
+{
+  "info": {
+    "name": "InviteSheet API",
+    "description": "Complete API collection for InviteSheet SaaS backend.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": { "method": "GET", "url": "{{baseUrl}}/health" },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));", "pm.test('Returns ok', () => pm.expect(pm.response.json().data.status).to.eql('ok'));"] } }]
+        },
+        {
+          "name": "Readiness Check",
+          "request": { "method": "GET", "url": "{{baseUrl}}/ready" },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Returns status', () => pm.expect(pm.response.json()).to.have.property('success'));"] } }]
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "request": { "method": "POST", "url": "{{baseUrl}}/api/v1/auth/register", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"companyName\": \"Acme Events\", \"fullName\": \"Priya Sharma\", \"email\": \"priya@acme.com\", \"phone\": \"9876543210\", \"password\": \"Test@1234\"}" } },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 201', () => pm.response.to.have.status(201));"] } }]
+        },
+        {
+          "name": "Verify OTP",
+          "request": { "method": "POST", "url": "{{baseUrl}}/api/v1/auth/verify-otp", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"email\": \"priya@acme.com\", \"code\": \"123456\"}" } },
+          "event": [{ "listen": "test", "script": { "exec": ["if (pm.response.code === 200) { const token = pm.response.json().data.accessToken; pm.environment.set('accessToken', token); }"] } }]
+        },
+        {
+          "name": "Resend OTP",
+          "request": { "method": "POST", "url": "{{baseUrl}}/api/v1/auth/resend-otp", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"email\": \"priya@acme.com\"}" } }
+        },
+        {
+          "name": "Login",
+          "request": { "method": "POST", "url": "{{baseUrl}}/api/v1/auth/login", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"email\": \"priya@acme.com\", \"password\": \"Test@1234\"}" } },
+          "event": [{ "listen": "test", "script": { "exec": ["if (pm.response.code === 200) { pm.environment.set('accessToken', pm.response.json().data.accessToken); }"] } }]
+        },
+        {
+          "name": "Logout",
+          "request": { "method": "POST", "url": "{{baseUrl}}/api/v1/auth/logout", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }] }
+        },
+        {
+          "name": "Refresh Token",
+          "request": { "method": "POST", "url": "{{baseUrl}}/api/v1/auth/refresh" },
+          "event": [{ "listen": "test", "script": { "exec": ["if (pm.response.code === 200) { pm.environment.set('accessToken', pm.response.json().data.accessToken); }"] } }]
+        },
+        {
+          "name": "Forgot Password",
+          "request": { "method": "POST", "url": "{{baseUrl}}/api/v1/auth/forgot-password", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"email\": \"priya@acme.com\"}" } }
+        },
+        {
+          "name": "Reset Password",
+          "request": { "method": "POST", "url": "{{baseUrl}}/api/v1/auth/reset-password", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"email\": \"priya@acme.com\", \"code\": \"123456\", \"password\": \"NewPass@1234\", \"confirmPassword\": \"NewPass@1234\"}" } }
+        },
+        {
+          "name": "Onboarding",
+          "request": { "method": "POST", "url": "{{baseUrl}}/api/v1/auth/onboarding", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "body": { "mode": "formdata", "formdata": [{ "key": "name", "value": "Acme Events", "type": "text" }, { "key": "city", "value": "Mumbai", "type": "text" }, { "key": "whatsapp", "value": "9876543210", "type": "text" }] } }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        { "name": "Get Me", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/users/me", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }] } },
+        { "name": "Update Me", "request": { "method": "PATCH", "url": "{{baseUrl}}/api/v1/users/me", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"fullName\": \"Priya Sharma Updated\"}" } } },
+        { "name": "Change Password", "request": { "method": "PATCH", "url": "{{baseUrl}}/api/v1/users/me/password", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"current\": \"Test@1234\", \"next\": \"NewPass@1234\", \"confirm\": \"NewPass@1234\"}" } } },
+        { "name": "Export Data", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/users/me/export", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }] } },
+        { "name": "Delete Account", "request": { "method": "DELETE", "url": "{{baseUrl}}/api/v1/users/me", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"confirmText\": \"DELETE MY ACCOUNT\"}" } } }
+      ]
+    },
+    {
+      "name": "Company",
+      "item": [
+        { "name": "Update Company", "request": { "method": "PATCH", "url": "{{baseUrl}}/api/v1/company", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "body": { "mode": "formdata", "formdata": [{ "key": "name", "value": "Updated Company", "type": "text" }, { "key": "city", "value": "Delhi", "type": "text" }, { "key": "whatsappNumber", "value": "9876543210", "type": "text" }] } } }
+      ]
+    },
+    {
+      "name": "Events",
+      "item": [
+        { "name": "List Events", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/events?status=all&page=1&limit=20", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }] } },
+        {
+          "name": "Create Event",
+          "request": { "method": "POST", "url": "{{baseUrl}}/api/v1/events", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"name\": \"Test Wedding\", \"location\": \"Mumbai Marriott\", \"eventType\": \"Wedding\", \"startDate\": \"2026-07-01\", \"endDate\": \"2026-07-03\"}" } },
+          "event": [{ "listen": "test", "script": { "exec": ["if (pm.response.code === 201) { pm.environment.set('eventId', pm.response.json().data._id); }"] } }]
+        },
+        { "name": "Get Event", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/events/{{eventId}}", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }] } },
+        { "name": "Update Event", "request": { "method": "PATCH", "url": "{{baseUrl}}/api/v1/events/{{eventId}}", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"name\": \"Updated Wedding\"}" } } },
+        { "name": "Delete Event", "request": { "method": "DELETE", "url": "{{baseUrl}}/api/v1/events/{{eventId}}", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }] } }
+      ]
+    },
+    {
+      "name": "Sheets",
+      "item": [
+        { "name": "List Sheets", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/events/{{eventId}}/sheets?includeHidden=true", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }] },
+          "event": [{ "listen": "test", "script": { "exec": ["if (pm.response.code === 200) { const data = pm.response.json().data; if (data.length > 0) pm.environment.set('sheetId', data[0]._id); }"] } }]
+        },
+        { "name": "Create Sheet", "request": { "method": "POST", "url": "{{baseUrl}}/api/v1/events/{{eventId}}/sheets", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"name\": \"New Sheet\"}" } } },
+        { "name": "Update Sheet", "request": { "method": "PATCH", "url": "{{baseUrl}}/api/v1/events/{{eventId}}/sheets/{{sheetId}}", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"name\": \"Renamed Sheet\"}" } } },
+        { "name": "Delete Sheet", "request": { "method": "DELETE", "url": "{{baseUrl}}/api/v1/events/{{eventId}}/sheets/{{sheetId}}", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }] } }
+      ]
+    },
+    {
+      "name": "Guests",
+      "item": [
+        { "name": "Bulk Replace Guests", "request": { "method": "POST", "url": "{{baseUrl}}/api/v1/events/{{eventId}}/sheets/{{sheetId}}/guests/bulk", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"operation\": \"replace\", \"guests\": [{\"name\": \"John Doe\", \"contact\": \"9876543210\", \"status\": \"Confirmed\"}, {\"name\": \"Jane Smith\", \"contact\": \"9876543211\", \"status\": \"VIP\"}]}" } },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Returns counts', () => { const d = pm.response.json().data; pm.expect(d).to.have.property('total'); });"] } }]
+        },
+        { "name": "Bulk Check-in", "request": { "method": "PATCH", "url": "{{baseUrl}}/api/v1/events/{{eventId}}/sheets/{{sheetId}}/guests/bulk-checkin", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"guestIds\": [\"{{guestId}}\"], \"checkIn\": true}" } } },
+        { "name": "Bulk Delete Guests", "request": { "method": "DELETE", "url": "{{baseUrl}}/api/v1/events/{{eventId}}/sheets/{{sheetId}}/guests/bulk", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"guestIds\": [\"{{guestId}}\"]}" } } }
+      ]
+    },
+    {
+      "name": "SMS",
+      "item": [
+        { "name": "Preview SMS", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/events/{{eventId}}/sms/preview?recipientType=all-sheets", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }] } },
+        { "name": "Send SMS", "request": { "method": "POST", "url": "{{baseUrl}}/api/v1/events/{{eventId}}/sms", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\"recipientType\": \"all-sheets\", \"message\": \"Hi {name}, you are invited to our event!\"}" } } }
+      ]
+    },
+    {
+      "name": "Export",
+      "item": [
+        { "name": "Export Event XLSX", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/events/{{eventId}}/export", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }] } }
+      ]
+    }
+  ]
+}

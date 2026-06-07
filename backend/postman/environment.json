@@ -1,0 +1,12 @@
+{
+  "id": "invitesheet-local",
+  "name": "InviteSheet - Local",
+  "values": [
+    { "key": "baseUrl", "value": "http://localhost:5000", "type": "default", "enabled": true },
+    { "key": "accessToken", "value": "", "type": "default", "enabled": true },
+    { "key": "eventId", "value": "", "type": "default", "enabled": true },
+    { "key": "sheetId", "value": "", "type": "default", "enabled": true },
+    { "key": "guestId", "value": "", "type": "default", "enabled": true }
+  ],
+  "_postman_variable_scope": "environment"
+}

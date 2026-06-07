@@ -1,15 +1,26 @@
 import { useState } from "react";
+import { useNavigate } from "react-router";
+import api from "@/lib/api";
 import { AuthShell, Field, PrimaryButton, Alert } from "./_shared";
 import { KeyRound, ArrowLeft } from "lucide-react";
 
-export default function ForgotPassword({ onNav }: { onNav?: (s: string) => void }) {
+export default function ForgotPassword() {
+  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
+  const [sending, setSending] = useState(false);
   const valid = /^\S+@\S+\.\S+$/.test(email);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSent(true);
+    setSending(true);
+    try {
+      await api.post("/auth/forgot-password", { email });
+      sessionStorage.setItem("resetEmail", email);
+      setSent(true);
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
@@ -28,14 +39,14 @@ export default function ForgotPassword({ onNav }: { onNav?: (s: string) => void 
         <Field label="Email" type="email" value={email} onChange={setEmail} placeholder="you@company.com" autoComplete="email" />
 
         {sent ? (
-          <PrimaryButton onClick={() => onNav?.("reset")}>Enter reset code</PrimaryButton>
+          <PrimaryButton onClick={() => navigate("/reset-password")}>Enter reset code</PrimaryButton>
         ) : (
-          <PrimaryButton type="submit" disabled={!valid}>Send Reset Code</PrimaryButton>
+          <PrimaryButton type="submit" disabled={!valid || sending}>{sending ? "Sending..." : "Send Reset Code"}</PrimaryButton>
         )}
       </form>
 
       <div className="flex justify-center mt-6">
-        <button type="button" onClick={() => onNav?.("login")} className="text-sm font-semibold text-gray-500 hover:text-gray-700 inline-flex items-center gap-1.5">
+        <button type="button" onClick={() => navigate("/login")} className="text-sm font-semibold text-gray-500 hover:text-gray-700 inline-flex items-center gap-1.5">
           <ArrowLeft className="w-3.5 h-3.5" /> Back to Login
         </button>
       </div>

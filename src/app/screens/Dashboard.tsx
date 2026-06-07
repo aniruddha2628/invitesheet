@@ -1,4 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router";
+import api from "@/lib/api";
 import {
   Home, Calendar, Settings as SettingsIcon, LogOut, Plus, MapPin, MoreHorizontal,
   CalendarDays, Users, FileSpreadsheet, MessageSquare, Sparkles, Crown, ArrowRight, X,
@@ -37,7 +39,18 @@ const fmtDate = (iso: string) => {
   return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 };
 
-export function Sidebar({ active, onNav }: { active: "dashboard" | "settings"; onNav?: (s: string) => void }) {
+const toApiDate = (value: string) => {
+  const [d, m, y] = value.split("/");
+  return y && m && d ? `${y}-${m}-${d}` : value;
+};
+
+export function Sidebar({ active }: { active: "dashboard" | "settings" }) {
+  const navigate = useNavigate();
+  const go = (target: string) => {
+    const path = target === "settings" ? "/dashboard/settings" : target === "login" ? "/login" : "/dashboard";
+    if (target === "login") localStorage.removeItem("token");
+    navigate(path);
+  };
   const items: { id: "dashboard" | "settings"; label: string; icon: React.ComponentType<{ className?: string }>; target: string }[] = [
     { id: "dashboard", label: "Dashboard", icon: Home, target: "dashboard" },
     { id: "settings", label: "Settings", icon: SettingsIcon, target: "settings" },
@@ -45,7 +58,7 @@ export function Sidebar({ active, onNav }: { active: "dashboard" | "settings"; o
   return (
     <aside className="hidden md:flex flex-col w-60 bg-[#0F172A] text-slate-300 shrink-0">
       <div className="h-14 flex items-center px-5 border-b border-white/5">
-        <Logo inverted onClick={() => onNav?.("dashboard")} />
+        <Logo inverted onClick={() => go("dashboard")} />
       </div>
       <nav className="flex-1 p-3 space-y-1">
         {items.map(({ id, label, icon: Icon, target }) => {
@@ -53,7 +66,7 @@ export function Sidebar({ active, onNav }: { active: "dashboard" | "settings"; o
           return (
             <button
               key={id}
-              onClick={() => onNav?.(target)}
+              onClick={() => go(target)}
               className={cn(
                 "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold transition-all",
                 isActive ? "bg-white/10 text-white shadow-[inset_2px_0_0_0_var(--color-primary)]" : "text-slate-400 hover:bg-white/5 hover:text-white",
@@ -73,7 +86,7 @@ export function Sidebar({ active, onNav }: { active: "dashboard" | "settings"; o
           <p className="text-xs text-slate-300 mt-1">2 of 2 events used</p>
           <button className="mt-2 w-full text-xs font-semibold text-primary hover:underline text-left">Upgrade to Pro →</button>
         </div>
-        <button onClick={() => onNav?.("login")} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold text-slate-400 hover:bg-white/5 hover:text-white transition-all">
+        <button onClick={() => go("login")} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold text-slate-400 hover:bg-white/5 hover:text-white transition-all">
           <LogOut className="w-4 h-4" /> Logout
         </button>
       </div>
@@ -81,10 +94,12 @@ export function Sidebar({ active, onNav }: { active: "dashboard" | "settings"; o
   );
 }
 
-export function Topbar({ company = "Acme Events Pvt Ltd", user = "Priya Sharma", role = "owner", onNav }: { company?: string; user?: string; role?: Role; onNav?: (s: string) => void }) {
+export function Topbar({ company = "Acme Events Pvt Ltd", user = "Priya Sharma", role = "owner" }: { company?: string; user?: string; role?: Role }) {
+  const navigate = useNavigate();
+  const goDashboard = () => navigate("/dashboard");
   return (
     <header className="h-14 bg-white border-b border-gray-100 flex items-center justify-between px-4 sm:px-6 shrink-0">
-      <div className="md:hidden"><Logo onClick={() => onNav?.("dashboard")} /></div>
+      <div className="md:hidden"><Logo onClick={goDashboard} /></div>
       <div className="hidden md:block" />
       <div className="flex items-center gap-3">
         <div className="hidden sm:flex flex-col items-end leading-tight">
@@ -161,13 +176,20 @@ function EventCard({ ev, onOpen, onEdit, onDelete }: { ev: EventItem; onOpen?: (
   );
 }
 
-export default function Dashboard({ onNav }: { onNav?: (s: string) => void }) {
+export default function Dashboard() {
+  const navigate = useNavigate();
   const [events, setEvents] = useState<EventItem[]>(DEFAULT_EVENTS);
   const [showModal, setShowModal] = useState(false);
   const [editingEvent, setEditingEvent] = useState<EventItem | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [showSetup, setShowSetup] = useState(true);
   const [modalPlanState, setModalPlanState] = useState(false);
+
+  useEffect(() => {
+    api.get("/events").then((res) => {
+      setEvents(res.data.data.map((ev: any) => ({ ...ev, id: ev._id })));
+    }).catch(() => undefined);
+  }, []);
 
   const eventsUsed = events.length;
   const planLimitReached = eventsUsed >= 2;
@@ -183,9 +205,9 @@ export default function Dashboard({ onNav }: { onNav?: (s: string) => void }) {
 
   return (
     <div className="flex h-screen bg-gray-50 font-sans overflow-hidden">
-      <Sidebar active="dashboard" onNav={onNav} />
+      <Sidebar active="dashboard" />
       <div className="flex-1 flex flex-col min-w-0">
-        <Topbar onNav={onNav} />
+        <Topbar />
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
           <div className="max-w-7xl mx-auto space-y-6">
             {/* Complete Setup banner — shown if onboarding skipped */}
@@ -196,7 +218,7 @@ export default function Dashboard({ onNav }: { onNav?: (s: string) => void }) {
                   <p className="text-sm font-bold text-gray-900">Finish setting up InviteSheet</p>
                   <p className="text-xs text-gray-600 mt-0.5">Complete your company profile and create your first event to get the most out of InviteSheet.</p>
                 </div>
-                <button onClick={() => onNav?.("onboarding")} className="inline-flex items-center gap-1.5 px-3 py-2 bg-primary text-white text-xs font-bold rounded-lg hover:bg-primary/90 shadow-sm shrink-0">
+                <button onClick={() => navigate("/onboarding")} className="inline-flex items-center gap-1.5 px-3 py-2 bg-primary text-white text-xs font-bold rounded-lg hover:bg-primary/90 shadow-sm shrink-0">
                   Complete Setup <ArrowRight className="w-3.5 h-3.5" />
                 </button>
                 <button onClick={() => setShowSetup(false)} className="text-gray-400 hover:text-gray-700 p-1 shrink-0"><X className="w-4 h-4" /></button>
@@ -272,9 +294,12 @@ export default function Dashboard({ onNav }: { onNav?: (s: string) => void }) {
                   <EventCard
                     key={ev.id}
                     ev={ev}
-                    onOpen={() => onNav?.("rsvp", ev.eventType, ev.id, ev.name)}
+                    onOpen={() => navigate(`/events/${ev.id}/rsvp`, { state: { eventType: ev.eventType, eventName: ev.name } })}
                     onEdit={() => { setEditingEvent(ev); setShowModal(true); }}
-                    onDelete={() => setEvents(es => es.filter(e => e.id !== ev.id))}
+                    onDelete={async () => {
+                      await api.delete(`/events/${ev.id}`);
+                      setEvents(es => es.filter(e => e.id !== ev.id));
+                    }}
                   />
                 ))}
               </div>
@@ -286,13 +311,14 @@ export default function Dashboard({ onNav }: { onNav?: (s: string) => void }) {
       <CreateEventModal
         open={showModal}
         onClose={() => { setShowModal(false); setEditingEvent(null); }}
-        onCreate={(ev) => {
+        onCreate={async (ev) => {
+          const payload = { ...ev, startDate: toApiDate(ev.startDate), endDate: toApiDate(ev.endDate) };
           if (editingEvent) {
-            // Update existing event
-            setEvents(prev => prev.map(e => e.id === editingEvent.id ? { ...e, ...ev } : e));
+            const res = await api.patch(`/events/${editingEvent.id}`, payload);
+            setEvents(prev => prev.map(e => e.id === editingEvent.id ? { ...res.data.data, id: res.data.data._id } : e));
           } else {
-            // Create new event
-            setEvents(prev => [{ ...ev, id: String(Date.now()), status: "upcoming", sheetCount: 1, totalGuests: 0, checkedIn: 0, notComing: 0, idsPending: 0 }, ...prev]);
+            const res = await api.post("/events", { ...payload, defaultColumns: ["pax", "arrival", "departure", "idType", "travel", "status"] });
+            setEvents(prev => [{ ...res.data.data, id: res.data.data._id }, ...prev]);
           }
           setShowModal(false);
           setEditingEvent(null);

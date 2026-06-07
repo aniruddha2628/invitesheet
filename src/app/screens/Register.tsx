@@ -1,13 +1,17 @@
 import { useState } from "react";
+import { useNavigate } from "react-router";
+import api from "@/lib/api";
 import { SplitAuthShell, Field, PasswordField, PrimaryButton, LinkText, PasswordStrength, Checkbox, Alert, passwordValidity } from "./_shared";
 import { Users, MessageSquare, FileSpreadsheet, Quote } from "lucide-react";
 
 const PHONE_RE = /^[6-9]\d{9}$/;
 
-export default function Register({ onNav }: { onNav?: (s: string) => void }) {
+export default function Register() {
+  const navigate = useNavigate();
   const [f, setF] = useState({ companyName: "", fullName: "", email: "", phone: "", password: "", confirmPassword: "" });
   const [terms, setTerms] = useState(false);
   const [serverErr, setServerErr] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const set = (k: keyof typeof f) => (v: string) => setF(p => ({ ...p, [k]: v }));
 
   const errors = {
@@ -21,14 +25,26 @@ export default function Register({ onNav }: { onNav?: (s: string) => void }) {
   const allFilled = f.companyName && f.fullName && f.email && f.phone && f.password && f.confirmPassword;
   const isValid = allFilled && !Object.values(errors).some(Boolean) && pwOk && terms;
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setServerErr(null);
-    if (f.email === "taken@example.com") {
-      setServerErr("An account with this email already exists.");
-      return;
+    setSubmitting(true);
+    try {
+      await api.post("/auth/register", {
+        companyName: f.companyName,
+        fullName: f.fullName,
+        email: f.email,
+        phone: f.phone,
+        password: f.password,
+      });
+      sessionStorage.setItem("pendingEmail", f.email);
+      sessionStorage.setItem("pendingCompany", f.companyName);
+      navigate("/otp");
+    } catch (error: any) {
+      setServerErr(error.response?.data?.error?.message ?? "Unable to create account. Please try again.");
+    } finally {
+      setSubmitting(false);
     }
-    onNav?.("otp");
   };
 
   return (
@@ -113,11 +129,11 @@ export default function Register({ onNav }: { onNav?: (s: string) => void }) {
           }
         />
 
-        <PrimaryButton type="submit" disabled={!isValid}>Create Account</PrimaryButton>
+        <PrimaryButton type="submit" disabled={!isValid || submitting}>{submitting ? "Creating..." : "Create Account"}</PrimaryButton>
       </form>
 
       <p className="text-sm text-gray-500 text-center mt-6">
-        Already have an account? <LinkText onClick={() => onNav?.("login")}>Sign In</LinkText>
+        Already have an account? <LinkText onClick={() => navigate("/login")}>Sign In</LinkText>
       </p>
     </SplitAuthShell>
   );

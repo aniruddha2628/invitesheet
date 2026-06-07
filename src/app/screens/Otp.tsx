@@ -1,12 +1,16 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router";
+import api from "@/lib/api";
 import { AuthShell, OtpInput, PrimaryButton, LinkText, Alert } from "./_shared";
 import { Mail } from "lucide-react";
 
-export default function Otp({ onNav, email = "priya@acmeevents.in" }: { onNav?: (s: string) => void; email?: string }) {
+export default function Otp({ email = sessionStorage.getItem("pendingEmail") || "priya@acmeevents.in" }: { email?: string }) {
+  const navigate = useNavigate();
   const [code, setCode] = useState("");
   const [cooldown, setCooldown] = useState(30);
   const [err, setErr] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>("OTP sent to your email. Please verify to complete registration.");
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -14,19 +18,31 @@ export default function Otp({ onNav, email = "priya@acmeevents.in" }: { onNav?: 
     return () => clearTimeout(t);
   }, [cooldown]);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr(null);
-    if (code === "000000") { setErr("Incorrect OTP. 2 attempts remaining."); return; }
-    if (code === "111111") { setErr("OTP has expired. Please request a new one."); return; }
-    onNav?.("onboarding");
+    setSubmitting(true);
+    try {
+      const res = await api.post("/auth/verify-otp", { email, code });
+      localStorage.setItem("token", res.data.data.accessToken);
+      navigate("/onboarding");
+    } catch (error: any) {
+      setErr(error.response?.data?.error?.message ?? "Unable to verify OTP. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const resend = () => {
+  const resend = async () => {
     if (cooldown > 0) { setErr("Please wait 30 seconds before requesting another OTP."); return; }
     setErr(null);
-    setInfo("A new OTP has been sent to your email.");
-    setCooldown(30);
+    try {
+      await api.post("/auth/resend-otp", { email });
+      setInfo("A new OTP has been sent to your email.");
+      setCooldown(30);
+    } catch (error: any) {
+      setErr(error.response?.data?.error?.message ?? "Unable to resend OTP. Please try again.");
+    }
   };
 
   return (
@@ -45,7 +61,7 @@ export default function Otp({ onNav, email = "priya@acmeevents.in" }: { onNav?: 
 
         <OtpInput value={code} onChange={setCode} />
 
-        <PrimaryButton type="submit" disabled={code.length !== 6}>Verify</PrimaryButton>
+        <PrimaryButton type="submit" disabled={code.length !== 6 || submitting}>{submitting ? "Verifying..." : "Verify"}</PrimaryButton>
       </form>
 
       <div className="flex items-center justify-between mt-5 text-sm">
@@ -57,7 +73,7 @@ export default function Otp({ onNav, email = "priya@acmeevents.in" }: { onNav?: 
         >
           {cooldown > 0 ? `Resend OTP in ${cooldown}s` : "Resend OTP"}
         </button>
-        <LinkText onClick={() => onNav?.("register")} className="text-gray-500 hover:text-gray-700">Change email</LinkText>
+        <LinkText onClick={() => navigate("/register")} className="text-gray-500 hover:text-gray-700">Change email</LinkText>
       </div>
     </AuthShell>
   );

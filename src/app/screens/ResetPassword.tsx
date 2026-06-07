@@ -1,19 +1,33 @@
 import { useState } from "react";
+import { useNavigate } from "react-router";
+import api from "@/lib/api";
 import { AuthShell, OtpInput, PasswordField, PrimaryButton, PasswordStrength, Field, Alert, passwordValidity } from "./_shared";
 
-export default function ResetPassword({ onNav, email: initialEmail = "priya@acmeevents.in" }: { onNav?: (s: string) => void; email?: string }) {
+export default function ResetPassword({ email: initialEmail = sessionStorage.getItem("resetEmail") || "priya@acmeevents.in" }: { email?: string }) {
+  const navigate = useNavigate();
   const [email, setEmail] = useState(initialEmail);
   const [code, setCode] = useState("");
   const [pw, setPw] = useState("");
   const [cpw, setCpw] = useState("");
   const [done, setDone] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const mismatch = cpw && cpw !== pw ? "Passwords do not match" : undefined;
   const pwOk = passwordValidity(pw).valid;
   const ready = code.length === 6 && pwOk && !mismatch && /^\S+@\S+\.\S+$/.test(email);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setDone(true);
+    setErr(null);
+    setSubmitting(true);
+    try {
+      await api.post("/auth/reset-password", { email, code, password: pw, confirmPassword: cpw });
+      setDone(true);
+    } catch (error: any) {
+      setErr(error.response?.data?.error?.message ?? "Unable to reset password. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -23,6 +37,7 @@ export default function ResetPassword({ onNav, email: initialEmail = "priya@acme
 
       <form className="mt-6 space-y-5" onSubmit={submit}>
         {done && <Alert kind="success">Password reset successful. Please log in with your new password.</Alert>}
+        {err && <Alert kind="error">{err}</Alert>}
 
         <Field label="Email" type="email" value={email} onChange={setEmail} readOnly />
 
@@ -39,9 +54,9 @@ export default function ResetPassword({ onNav, email: initialEmail = "priya@acme
         <Field label="Confirm Password" type="password" value={cpw} onChange={setCpw} placeholder="Re-enter password" error={mismatch} autoComplete="new-password" />
 
         {done ? (
-          <PrimaryButton onClick={() => onNav?.("login")}>Go to login</PrimaryButton>
+          <PrimaryButton onClick={() => navigate("/login")}>Go to login</PrimaryButton>
         ) : (
-          <PrimaryButton type="submit" disabled={!ready}>Reset Password</PrimaryButton>
+          <PrimaryButton type="submit" disabled={!ready || submitting}>{submitting ? "Resetting..." : "Reset Password"}</PrimaryButton>
         )}
       </form>
     </AuthShell>

@@ -1,11 +1,8 @@
 import React, { useState } from "react";
 import { Eye, EyeOff, AlertCircle, CheckCircle2 } from "lucide-react";
-import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
+import { cn } from "@/lib/utils";
 
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
+export { cn };
 
 export function Logo({ size = "md", inverted = false, onClick }: { size?: "md" | "lg"; inverted?: boolean; onClick?: () => void }) {
   const sq = size === "lg" ? "w-10 h-10 text-lg" : "w-8 h-8";

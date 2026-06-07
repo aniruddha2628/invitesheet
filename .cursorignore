@@ -1,0 +1,10 @@
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+backend/dist/
+.npm-cache/
+coverage/
+*.pem
+*.key
