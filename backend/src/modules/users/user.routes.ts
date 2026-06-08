@@ -15,6 +15,9 @@ router.patch('/me', requireAuth, validate({ body: updateProfileSchema }), ctrl.u
 /** PATCH /api/v1/users/me/password — Change password */
 router.patch('/me/password', requireAuth, validate({ body: changePasswordSchema }), ctrl.changePasswordHandler);
 
+/** GET /api/v1/users/me/dashboard-stats — Aggregated dashboard stats */
+router.get('/me/dashboard-stats', requireAuth, ctrl.getDashboardStatsHandler);
+
 /** GET /api/v1/users/me/export — Export all user data as JSON */
 router.get('/me/export', requireAuth, ctrl.exportDataHandler);
 

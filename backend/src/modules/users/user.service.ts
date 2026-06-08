@@ -44,6 +44,40 @@ export async function getMe(userId: string) {
 }
 
 /**
+ * GET /users/me/dashboard-stats — Aggregated dashboard statistics.
+ */
+export async function getDashboardStats(userId: string) {
+  const user = await User.findOne({ _id: userId, isDeleted: false });
+  if (!user) throw new AppError(404, 'NOT_FOUND', 'User not found.');
+
+  const events = await Event.find({ userId, isDeleted: false }).lean();
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  let activeEvents = 0;
+  for (const ev of events) {
+    const start = new Date(ev.startDate);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(ev.endDate);
+    end.setHours(23, 59, 59, 999);
+    if (start <= today && end >= today) activeEvents++;
+  }
+
+  const totalGuestsManaged = await Guest.countDocuments({ userId, isHidden: false });
+
+  // SMS send history is not persisted yet — return 0 honestly
+  const messagesSent = 0;
+
+  return {
+    totalEvents: events.length,
+    activeEvents,
+    totalGuestsManaged,
+    messagesSent,
+  };
+}
+
+/**
  * PATCH /users/me — Update profile (fullName, phone only).
  */
 export async function updateMe(userId: string, data: { fullName?: string; phone?: string }) {

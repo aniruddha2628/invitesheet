@@ -10,11 +10,20 @@ import CreateEventModal, { EventItem } from "./CreateEventModal";
 
 type Role = "owner" | "admin" | "member";
 
-const DEFAULT_EVENTS: EventItem[] = [
-  { id: "1", name: "Ritika & Yash Wedding", location: "ITC Grand Bharat, Gurgaon", eventType: "Wedding", startDate: "2026-12-12", endDate: "2026-12-15", status: "upcoming", sheetCount: 4, totalGuests: 487, checkedIn: 0, notComing: 12, idsPending: 38 },
-  { id: "2", name: "Acme Annual Offsite", location: "Taj Aravali, Udaipur", eventType: "Corporate", startDate: "2026-11-02", endDate: "2026-11-05", status: "active", sheetCount: 3, totalGuests: 142, checkedIn: 87, notComing: 4, idsPending: 6 },
-  { id: "3", name: "Mehta Sangeet Night", location: "The Leela Palace, Jaipur", eventType: "Social", startDate: "2026-10-28", endDate: "2026-10-28", status: "past", sheetCount: 2, totalGuests: 210, checkedIn: 196, notComing: 14, idsPending: 0 },
-];
+interface UserInfo {
+  fullName: string;
+  plan: "free" | "pro";
+  role: Role;
+  planLimits: { maxEvents: number; currentEventCount: number };
+  company: { name: string } | null;
+}
+
+interface DashboardStats {
+  totalEvents: number;
+  activeEvents: number;
+  totalGuestsManaged: number;
+  messagesSent: number;
+}
 
 const TYPE_DOT: Record<EventItem["eventType"], string> = {
   Wedding: "bg-pink-500", Corporate: "bg-blue-500", Social: "bg-purple-500", Other: "bg-gray-400",
@@ -44,7 +53,7 @@ const toApiDate = (value: string) => {
   return y && m && d ? `${y}-${m}-${d}` : value;
 };
 
-export function Sidebar({ active }: { active: "dashboard" | "settings" }) {
+export function Sidebar({ active, userInfo }: { active: "dashboard" | "settings"; userInfo?: UserInfo | null }) {
   const navigate = useNavigate();
   const go = (target: string) => {
     const path = target === "settings" ? "/dashboard/settings" : target === "login" ? "/login" : "/dashboard";
@@ -55,6 +64,11 @@ export function Sidebar({ active }: { active: "dashboard" | "settings" }) {
     { id: "dashboard", label: "Dashboard", icon: Home, target: "dashboard" },
     { id: "settings", label: "Settings", icon: SettingsIcon, target: "settings" },
   ];
+
+  const planLabel = userInfo?.plan === "pro" ? "Pro Plan" : "Free Plan";
+  const eventsUsed = userInfo?.planLimits?.currentEventCount ?? 0;
+  const maxEvents = userInfo?.planLimits?.maxEvents ?? 2;
+
   return (
     <aside className="hidden md:flex flex-col w-60 bg-[#0F172A] text-slate-300 shrink-0">
       <div className="h-14 flex items-center px-5 border-b border-white/5">
@@ -81,10 +95,12 @@ export function Sidebar({ active }: { active: "dashboard" | "settings" }) {
       <div className="p-3 border-t border-white/5 space-y-1">
         <div className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 mb-2">
           <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
-            <Crown className="w-3 h-3 text-amber-400" /> Free Plan
+            <Crown className="w-3 h-3 text-amber-400" /> {planLabel}
           </div>
-          <p className="text-xs text-slate-300 mt-1">2 of 2 events used</p>
-          <button className="mt-2 w-full text-xs font-semibold text-primary hover:underline text-left">Upgrade to Pro →</button>
+          <p className="text-xs text-slate-300 mt-1">{eventsUsed} of {maxEvents === Infinity ? "∞" : maxEvents} events used</p>
+          {userInfo?.plan !== "pro" && (
+            <button className="mt-2 w-full text-xs font-semibold text-primary hover:underline text-left">Upgrade to Pro →</button>
+          )}
         </div>
         <button onClick={() => go("login")} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold text-slate-400 hover:bg-white/5 hover:text-white transition-all">
           <LogOut className="w-4 h-4" /> Logout
@@ -94,20 +110,21 @@ export function Sidebar({ active }: { active: "dashboard" | "settings" }) {
   );
 }
 
-export function Topbar({ company = "Acme Events Pvt Ltd", user = "Priya Sharma", role = "owner" }: { company?: string; user?: string; role?: Role }) {
+export function Topbar({ company, user, role = "owner" }: { company?: string; user?: string; role?: Role }) {
   const navigate = useNavigate();
   const goDashboard = () => navigate("/dashboard");
+  const avatarSeed = encodeURIComponent(user || "user");
   return (
     <header className="h-14 bg-white border-b border-gray-100 flex items-center justify-between px-4 sm:px-6 shrink-0">
       <div className="md:hidden"><Logo onClick={goDashboard} /></div>
       <div className="hidden md:block" />
       <div className="flex items-center gap-3">
         <div className="hidden sm:flex flex-col items-end leading-tight">
-          <span className="text-sm font-semibold text-gray-800">{user}</span>
-          <span className="text-[11px] text-[#6A7282]">{company} · <span className="capitalize text-primary font-semibold">{role}</span></span>
+          <span className="text-sm font-semibold text-gray-800">{user || "Loading…"}</span>
+          <span className="text-[11px] text-[#6A7282]">{company || ""}{company && role ? " · " : ""}<span className="capitalize text-primary font-semibold">{role}</span></span>
         </div>
         <div className="w-9 h-9 rounded-full bg-gray-100 overflow-hidden ring-2 ring-white shadow-sm">
-          <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=priya" alt="avatar" />
+          <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${avatarSeed}`} alt="avatar" />
         </div>
       </div>
     </header>
@@ -178,36 +195,48 @@ function EventCard({ ev, onOpen, onEdit, onDelete }: { ev: EventItem; onOpen?: (
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const [events, setEvents] = useState<EventItem[]>(DEFAULT_EVENTS);
+  const [events, setEvents] = useState<EventItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [editingEvent, setEditingEvent] = useState<EventItem | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [showSetup, setShowSetup] = useState(true);
   const [modalPlanState, setModalPlanState] = useState(false);
+  const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
+  const [stats, setStats] = useState<DashboardStats>({ totalEvents: 0, activeEvents: 0, totalGuestsManaged: 0, messagesSent: 0 });
 
   useEffect(() => {
-    api.get("/events").then((res) => {
-      setEvents(res.data.data.map((ev: any) => ({ ...ev, id: ev._id })));
-    }).catch(() => undefined);
+    setLoading(true);
+    setError(null);
+
+    Promise.all([
+      api.get("/events"),
+      api.get("/users/me"),
+      api.get("/users/me/dashboard-stats"),
+    ])
+      .then(([eventsRes, meRes, statsRes]) => {
+        setEvents(eventsRes.data.data.map((ev: any) => ({ ...ev, id: ev._id })));
+        setUserInfo(meRes.data.data);
+        setStats(statsRes.data.data);
+        if (meRes.data.data.onboardingComplete) setShowSetup(false);
+      })
+      .catch((err) => {
+        setError(err?.response?.data?.error?.message || "Failed to load dashboard data. Please try again.");
+      })
+      .finally(() => setLoading(false));
   }, []);
 
-  const eventsUsed = events.length;
-  const planLimitReached = eventsUsed >= 2;
+  const maxEvents = userInfo?.planLimits?.maxEvents ?? 2;
+  const planLimitReached = events.length >= maxEvents;
 
   const filtered = useMemo(() => filter === "all" ? events : events.filter(e => e.status === filter), [events, filter]);
 
-  const stats = {
-    totalEvents: events.length,
-    activeEvents: events.filter(e => e.status === "active").length,
-    totalGuestsManaged: events.reduce((s, e) => s + e.totalGuests, 0),
-    whatsappMessagesSent: 1247,
-  };
-
   return (
     <div className="flex h-screen bg-gray-50 font-sans overflow-hidden">
-      <Sidebar active="dashboard" />
+      <Sidebar active="dashboard" userInfo={userInfo} />
       <div className="flex-1 flex flex-col min-w-0">
-        <Topbar />
+        <Topbar user={userInfo?.fullName} company={userInfo?.company?.name} role={userInfo?.role} />
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
           <div className="max-w-7xl mx-auto space-y-6">
             {/* Complete Setup banner — shown if onboarding skipped */}
@@ -246,12 +275,27 @@ export default function Dashboard() {
               </button>
             </div>
 
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <StatCard label="Total Events" value={stats.totalEvents} hint="Across all time" icon={Calendar} tone="bg-primary/10 text-primary" />
-              <StatCard label="Active Events" value={stats.activeEvents} hint="Happening now" icon={Sparkles} tone="bg-amber-100 text-amber-600" />
-              <StatCard label="Guests Managed" value={stats.totalGuestsManaged} hint="All events combined" icon={Users} tone="bg-blue-100 text-blue-600" />
-              <StatCard label="WhatsApp Sent" value={stats.whatsappMessagesSent} hint="Last 30 days" icon={MessageSquare} tone="bg-emerald-100 text-emerald-600" />
-            </div>
+            {error && (
+              <Alert kind="error">{error}</Alert>
+            )}
+
+            {loading ? (
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className="bg-white border border-gray-200 rounded-xl p-5 animate-pulse">
+                    <div className="h-3 w-20 bg-gray-200 rounded mb-3" />
+                    <div className="h-8 w-16 bg-gray-200 rounded" />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <StatCard label="Total Events" value={stats.totalEvents} hint="Across all time" icon={Calendar} tone="bg-primary/10 text-primary" />
+                <StatCard label="Active Events" value={stats.activeEvents} hint="Happening now" icon={Sparkles} tone="bg-amber-100 text-amber-600" />
+                <StatCard label="Guests Managed" value={stats.totalGuestsManaged} hint="All events combined" icon={Users} tone="bg-blue-100 text-blue-600" />
+                <StatCard label="Messages Sent" value={stats.messagesSent} hint="SMS via Fast2SMS" icon={MessageSquare} tone="bg-emerald-100 text-emerald-600" />
+              </div>
+            )}
 
             {/* Filter tabs */}
             <div className="flex items-center gap-1 border-b border-gray-200">

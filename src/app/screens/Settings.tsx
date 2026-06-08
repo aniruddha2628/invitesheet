@@ -13,13 +13,15 @@ const DELETE_PHRASE = "DELETE MY ACCOUNT";
 export default function Settings({ role = "owner" }: { role?: Role }) {
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("profile");
-  const [profile, setProfile] = useState({ fullName: "Priya Sharma", email: "priya@acmeevents.in", phone: "9876543210" });
-  const [company, setCompany] = useState({ companyName: "Acme Events Pvt Ltd", city: "Gurgaon", whatsappNumber: "9988776655" });
+  const [profile, setProfile] = useState({ fullName: "", email: "", phone: "" });
+  const [company, setCompany] = useState({ companyName: "", city: "", whatsappNumber: "" });
   const [pw, setPw] = useState({ current: "", next: "", confirm: "" });
   const [pwSuccess, setPwSuccess] = useState(false);
   const [pwErr, setPwErr] = useState<string | null>(null);
   const [deleteText, setDeleteText] = useState("");
   const [showDelete, setShowDelete] = useState(false);
+  const [plan, setPlan] = useState<"free" | "pro">("free");
+  const [planLimits, setPlanLimits] = useState({ maxEvents: 2, currentEventCount: 0 });
 
   const canEditCompany = role === "owner" || role === "admin";
   const canDelete = role === "owner";
@@ -31,6 +33,8 @@ export default function Settings({ role = "owner" }: { role?: Role }) {
       if (me.company) {
         setCompany({ companyName: me.company.name ?? "", city: me.company.city ?? "", whatsappNumber: me.company.whatsappNumber ?? "" });
       }
+      setPlan(me.plan);
+      setPlanLimits(me.planLimits);
     }).catch(() => undefined);
   }, []);
 
@@ -83,12 +87,19 @@ export default function Settings({ role = "owner" }: { role?: Role }) {
       setPwErr(error.response?.data?.error?.message ?? "Unable to update password.");
     }
   };
+  const userInfo = profile.fullName ? {
+    fullName: profile.fullName,
+    plan,
+    role: role as "owner" | "admin" | "member",
+    planLimits,
+    company: company.companyName ? { name: company.companyName } : null,
+  } : null;
 
   return (
     <div className="flex h-screen bg-gray-50 font-sans overflow-hidden">
-      <Sidebar active="settings" />
+      <Sidebar active="settings" userInfo={userInfo} />
       <div className="flex-1 flex flex-col min-w-0">
-        <Topbar role={role} />
+        <Topbar user={userInfo?.fullName} company={userInfo?.company?.name} role={role} />
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
           <div className="max-w-3xl mx-auto">
             <div className="mb-6">
@@ -250,8 +261,8 @@ export default function Settings({ role = "owner" }: { role?: Role }) {
 
                   <Section title="Plan & usage">
                     <div className="grid grid-cols-2 gap-3">
-                      <Stat label="Current Plan" value="Free" tone="text-primary" badge="Upgrade" />
-                      <Stat label="Events Used" value="2 / 2" tone="text-amber-600" />
+                      <Stat label="Current Plan" value={plan === "pro" ? "Pro" : "Free"} tone={plan === "pro" ? "text-emerald-600" : "text-primary"} badge={plan !== "pro" ? "Upgrade" : undefined} />
+                      <Stat label="Events Used" value={`${planLimits.currentEventCount} / ${planLimits.maxEvents === Infinity ? "∞" : planLimits.maxEvents}`} tone="text-amber-600" />
                     </div>
                   </Section>
                 </>

@@ -13,6 +13,17 @@ export async function getMeHandler(req: Request, res: Response, next: NextFuncti
   }
 }
 
+/** GET /api/v1/users/me/dashboard-stats */
+export async function getDashboardStatsHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    if (!req.user) throw new AppError(401, 'UNAUTHORIZED', 'Authentication required.');
+    const data = await userService.getDashboardStats(req.user.userId);
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+}
+
 /** PATCH /api/v1/users/me */
 export async function updateMeHandler(req: Request, res: Response, next: NextFunction) {
   try {
