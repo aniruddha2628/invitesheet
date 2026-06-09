@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import api from "@/lib/api";
-import { Logo, Field, PrimaryButton, SecondaryButton, cn } from "./_shared";
+import { Logo, Field, PrimaryButton, SecondaryButton, Alert, cn } from "./_shared";
 import { ClipboardList, Users, MessageSquare, Building2, ArrowRight, Image as ImageIcon, X } from "lucide-react";
 
 type Step = 0 | 1;
@@ -13,11 +13,14 @@ export default function Onboarding({ companyName = sessionStorage.getItem("pendi
   const [company, setCompany] = useState({ name: companyName, city: "", whatsapp: "", logoUrl: "" as string });
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
   const logoRef = useRef<HTMLInputElement>(null);
 
   const skip = () => navigate("/dashboard");
   const finish = async () => {
     setSaving(true);
+    setErr(null);
     try {
       const form = new FormData();
       form.append("name", company.name);
@@ -25,7 +28,12 @@ export default function Onboarding({ companyName = sessionStorage.getItem("pendi
       form.append("whatsapp", company.whatsapp);
       if (logoFile) form.append("logo", logoFile);
       await api.post("/auth/onboarding", form);
-      navigate("/dashboard");
+      setSuccess(true);
+      setTimeout(() => {
+        navigate("/dashboard");
+      }, 1500);
+    } catch (error: any) {
+      setErr(error.response?.data?.error?.message ?? "Unable to complete setup. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -96,6 +104,8 @@ export default function Onboarding({ companyName = sessionStorage.getItem("pendi
                 <p className="text-sm text-gray-500 mt-1">This appears on your invitations and WhatsApp messages.</p>
 
                 <div className="mt-6 space-y-4">
+                  {err && <Alert kind="error">{err}</Alert>}
+                  {success && <Alert kind="success">Setup completed successfully.</Alert>}
                   <div className="flex items-center gap-4">
                     <button
                       type="button"

@@ -9,15 +9,19 @@ export default function ForgotPassword() {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [sending, setSending] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
   const valid = /^\S+@\S+\.\S+$/.test(email);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErr(null);
     setSending(true);
     try {
       await api.post("/auth/forgot-password", { email });
       sessionStorage.setItem("resetEmail", email);
       setSent(true);
+    } catch (error: any) {
+      setErr(error.response?.data?.error?.message ?? "Unable to send reset code. Please try again.");
     } finally {
       setSending(false);
     }
@@ -32,9 +36,10 @@ export default function ForgotPassword() {
       <p className="text-sm text-gray-500 mt-1">Enter your email and we'll send a 6-digit reset code.</p>
 
       <form className="mt-6 space-y-4" onSubmit={submit}>
-        {sent && (
+        {sent && !err && (
           <Alert kind="success">If this email is registered, a password reset OTP has been sent.</Alert>
         )}
+        {err && <Alert kind="error">{err}</Alert>}
 
         <Field label="Email" type="email" value={email} onChange={setEmail} placeholder="you@company.com" autoComplete="email" />
 

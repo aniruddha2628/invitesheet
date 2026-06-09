@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import api from "@/lib/api";
 import { Sidebar, Topbar } from "./Dashboard";
 import { Field, PasswordField, PrimaryButton, PasswordStrength, Alert, cn, passwordValidity } from "./_shared";
-import { CheckCircle2, Download, AlertTriangle, Lock, ShieldAlert, Upload } from "lucide-react";
+import { CheckCircle2, Download, AlertTriangle, Lock, ShieldAlert, Upload, Image as ImageIcon } from "lucide-react";
 
 type Role = "owner" | "admin" | "member";
 type Tab = "profile" | "password" | "company";
@@ -14,14 +14,20 @@ export default function Settings({ role = "owner" }: { role?: Role }) {
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("profile");
   const [profile, setProfile] = useState({ fullName: "", email: "", phone: "" });
-  const [company, setCompany] = useState({ companyName: "", city: "", whatsappNumber: "" });
+  const [company, setCompany] = useState({ companyName: "", city: "", whatsappNumber: "", logoUrl: "" });
   const [pw, setPw] = useState({ current: "", next: "", confirm: "" });
   const [pwSuccess, setPwSuccess] = useState(false);
   const [pwErr, setPwErr] = useState<string | null>(null);
+  const [profileSuccess, setProfileSuccess] = useState(false);
+  const [profileErr, setProfileErr] = useState<string | null>(null);
+  const [companySuccess, setCompanySuccess] = useState(false);
+  const [companyErr, setCompanyErr] = useState<string | null>(null);
   const [deleteText, setDeleteText] = useState("");
   const [showDelete, setShowDelete] = useState(false);
   const [plan, setPlan] = useState<"free" | "pro">("free");
   const [planLimits, setPlanLimits] = useState({ maxEvents: 2, currentEventCount: 0 });
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const logoRef = useRef<HTMLInputElement>(null);
 
   const canEditCompany = role === "owner" || role === "admin";
   const canDelete = role === "owner";
@@ -31,7 +37,7 @@ export default function Settings({ role = "owner" }: { role?: Role }) {
       const me = res.data.data;
       setProfile({ fullName: me.fullName, email: me.email, phone: me.phone });
       if (me.company) {
-        setCompany({ companyName: me.company.name ?? "", city: me.company.city ?? "", whatsappNumber: me.company.whatsappNumber ?? "" });
+        setCompany({ companyName: me.company.name ?? "", city: me.company.city ?? "", whatsappNumber: me.company.whatsappNumber ?? "", logoUrl: me.company.logoUrl ?? "" });
       }
       setPlan(me.plan);
       setPlanLimits(me.planLimits);
@@ -39,17 +45,31 @@ export default function Settings({ role = "owner" }: { role?: Role }) {
   }, []);
 
   const saveProfile = async () => {
-    const res = await api.patch("/users/me", { fullName: profile.fullName, phone: profile.phone });
-    setProfile((p) => ({ ...p, fullName: res.data.data.fullName, phone: res.data.data.phone }));
+    setProfileErr(null); setProfileSuccess(false);
+    try {
+      const res = await api.patch("/users/me", { fullName: profile.fullName, phone: profile.phone });
+      setProfile((p) => ({ ...p, fullName: res.data.data.fullName, phone: res.data.data.phone }));
+      setProfileSuccess(true);
+    } catch (error: any) {
+      setProfileErr(error.response?.data?.error?.message ?? "Unable to update profile.");
+    }
   };
 
   const saveCompany = async () => {
-    const form = new FormData();
-    form.append("name", company.companyName);
-    form.append("city", company.city);
-    form.append("whatsappNumber", company.whatsappNumber);
-    const res = await api.patch("/company", form);
-    setCompany({ companyName: res.data.data.name, city: res.data.data.city, whatsappNumber: res.data.data.whatsappNumber });
+    setCompanyErr(null); setCompanySuccess(false);
+    try {
+      const form = new FormData();
+      form.append("name", company.companyName);
+      form.append("city", company.city);
+      form.append("whatsappNumber", company.whatsappNumber);
+      if (logoFile) form.append("logo", logoFile);
+      const res = await api.patch("/company", form);
+      setCompany({ companyName: res.data.data.name, city: res.data.data.city, whatsappNumber: res.data.data.whatsappNumber, logoUrl: res.data.data.logoUrl ?? "" });
+      setLogoFile(null);
+      setCompanySuccess(true);
+    } catch (error: any) {
+      setCompanyErr(error.response?.data?.error?.message ?? "Unable to update company details.");
+    }
   };
 
   const exportData = async () => {
@@ -112,7 +132,12 @@ export default function Settings({ role = "owner" }: { role?: Role }) {
                 {items.filter(i => i.show).map(it => (
                   <button
                     key={it.id}
-                    onClick={() => setTab(it.id)}
+                    onClick={() => {
+                      setTab(it.id);
+                      setProfileSuccess(false); setProfileErr(null);
+                      setCompanySuccess(false); setCompanyErr(null);
+                      setPwSuccess(false); setPwErr(null);
+                    }}
                     className={cn(
                       "px-4 py-3 text-sm font-semibold border-b-2 transition-colors -mb-px whitespace-nowrap",
                       tab === it.id ? "text-primary border-primary" : "text-gray-500 border-transparent hover:text-gray-700",
@@ -125,6 +150,8 @@ export default function Settings({ role = "owner" }: { role?: Role }) {
             <div className="mt-6 space-y-5">
               {tab === "profile" && (
                 <Section title="Your profile" description="This is how teammates and event collaborators see you.">
+                  {profileErr && <Alert kind="error">{profileErr}</Alert>}
+                  {profileSuccess && <Alert kind="success">Profile updated successfully.</Alert>}
                   <Field label="Full Name" value={profile.fullName} onChange={(v) => setProfile(p => ({ ...p, fullName: v }))} hint="2–100 characters" />
                   <Field
                     label="Email"
@@ -232,16 +259,46 @@ export default function Settings({ role = "owner" }: { role?: Role }) {
                   )}
 
                   <Section title="Company details" description="Shown on invitations and guest-facing communication.">
+                    {companyErr && <Alert kind="error">{companyErr}</Alert>}
+                    {companySuccess && <Alert kind="success">Company details updated successfully.</Alert>}
                     <div className="flex items-center gap-4 mb-2">
-                      <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-primary/20 to-emerald-100 border border-primary/30 flex items-center justify-center text-primary text-xl font-bold shrink-0">
-                        {company.companyName.charAt(0)}
-                      </div>
+                      <button
+                        type="button"
+                        disabled={!canEditCompany}
+                        onClick={() => logoRef.current?.click()}
+                        className="w-16 h-16 rounded-xl bg-gray-50 border-2 border-dashed border-gray-300 hover:border-primary hover:bg-primary/5 flex items-center justify-center text-gray-400 hover:text-primary transition-all shrink-0 overflow-hidden disabled:hover:border-gray-300 disabled:hover:bg-gray-50 disabled:hover:text-gray-400 disabled:cursor-not-allowed"
+                      >
+                        {company.logoUrl ? (
+                          <img src={company.logoUrl} alt="logo" className="w-full h-full object-cover rounded-xl" />
+                        ) : (
+                          <ImageIcon className="w-6 h-6" />
+                        )}
+                      </button>
                       <div>
                         <p className="text-sm font-bold text-gray-900">Company Logo</p>
-                        <button disabled={!canEditCompany} className="mt-1 inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline disabled:text-gray-400 disabled:no-underline">
-                          <Upload className="w-3 h-3" /> Upload logo
-                        </button>
+                        <p className="text-[11px] text-gray-500 mt-0.5">Optional · PNG or JPG up to 2 MB</p>
+                        {company.logoUrl && canEditCompany && (
+                          <button type="button" onClick={() => { setCompany(c => ({ ...c, logoUrl: "" })); setLogoFile(null); }} className="text-[11px] font-semibold text-red-600 hover:underline mt-1">Remove</button>
+                        )}
+                        {!company.logoUrl && canEditCompany && (
+                          <button type="button" onClick={() => logoRef.current?.click()} className="mt-1 inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline">
+                            <Upload className="w-3 h-3" /> Upload logo
+                          </button>
+                        )}
                       </div>
+                      <input
+                        ref={logoRef}
+                        type="file"
+                        accept="image/png,image/jpeg"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            setLogoFile(file);
+                            setCompany(c => ({ ...c, logoUrl: URL.createObjectURL(file) }));
+                          }
+                        }}
+                      />
                     </div>
 
                     <Field label="Company Name" value={company.companyName} onChange={(v) => setCompany(c => ({ ...c, companyName: v }))} readOnly={!canEditCompany} hint="2–100 characters" />
