@@ -1276,7 +1276,7 @@ export default function RsvpSheet({
         <div className="flex items-center gap-6">
           <Logo onClick={() => navigate("/dashboard")} />
           <div className="h-6 w-px bg-gray-200" />
-          <h1 className="text-base font-semibold text-gray-800">Ritika & Yash Wedding</h1>
+          <h1 className="text-base font-semibold text-gray-800">{activeEventName}</h1>
         </div>
 
         <div className="flex items-center gap-3">
