@@ -44,7 +44,7 @@ const FILTERS = ["all", "active", "upcoming", "past"] as const;
 type Filter = typeof FILTERS[number];
 
 const fmtDate = (iso: string) => {
-  const d = new Date(iso + "T00:00:00");
+  const d = new Date(iso.includes("T") ? iso : iso + "T00:00:00");
   return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 };
 
