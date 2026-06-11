@@ -120,10 +120,18 @@ export async function sendSMS(
             { headers: { authorization: env.FAST2SMS_API_KEY, 'Content-Type': 'application/json' } }
           );
           sent++;
-        } catch (error) {
+        } catch (error: any) {
           failed++;
           failedNames.push(recipient.name || 'Unknown');
-          logger.error('SMS send failed', { contact: phoneNumber.slice(0, 4) + '****', error: (error as any).message });
+          logger.error('SMS send failed', {
+            contact: phoneNumber.slice(0, 4) + '****',
+            status: error.response?.status,
+            responseData: error.response?.data,
+            responseHeaders: error.response?.headers,
+            requestUrl: FAST2SMS_URL,
+            requestPayload: { route: 'q', messageLength: personalizedMsg.length, numbers: phoneNumber.slice(0, 4) + '****' },
+            errorMessage: error.message,
+          });
         }
       }
     } else {
@@ -141,10 +149,18 @@ export async function sendSMS(
           { headers: { authorization: env.FAST2SMS_API_KEY, 'Content-Type': 'application/json' } }
         );
         sent += batch.length;
-      } catch (error) {
+      } catch (error: any) {
         failed += batch.length;
         batch.forEach((r) => failedNames.push(r.name || 'Unknown'));
-        logger.error('Batch SMS send failed', { error: (error as any).message });
+        logger.error('Batch SMS send failed', {
+          batchSize: batch.length,
+          status: error.response?.status,
+          responseData: error.response?.data,
+          responseHeaders: error.response?.headers,
+          requestUrl: FAST2SMS_URL,
+          requestPayload: { route: 'q', messageLength: data.message.length, numbersCount: batch.length },
+          errorMessage: error.message,
+        });
       }
     }
   }

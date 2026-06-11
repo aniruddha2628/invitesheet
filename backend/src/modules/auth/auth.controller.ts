@@ -14,7 +14,7 @@ cloudinary.config({
 const REFRESH_COOKIE_OPTIONS = {
   httpOnly: true,
   secure: env.NODE_ENV === 'production',
-  sameSite: 'strict' as const,
+  sameSite: env.NODE_ENV === 'production' ? 'none' as const : 'strict' as const,
   path: '/api/v1/auth/refresh',
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
 };
@@ -94,7 +94,7 @@ export async function logoutHandler(req: Request, res: Response, next: NextFunct
     res.clearCookie('refreshToken', {
       httpOnly: true,
       secure: env.NODE_ENV === 'production',
-      sameSite: 'strict' as const,
+      sameSite: env.NODE_ENV === 'production' ? 'none' as const : 'strict' as const,
       path: '/api/v1/auth/refresh',
     });
     res.status(200).json({ success: true, data: { message: 'Logged out successfully.' } });
