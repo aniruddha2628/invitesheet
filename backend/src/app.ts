@@ -22,6 +22,9 @@ import exportRoutes from './modules/export/export.routes.js';
 
 const app = express();
 
+// Trust first proxy (Render / load balancer) — required for correct client IP in rate limiting
+app.set('trust proxy', 1);
+
 // ── 1. Sentry request handler — must be first ──
 if (env.SENTRY_DSN) {
   app.use(Sentry.Handlers.requestHandler());
@@ -58,7 +61,7 @@ if (env.NODE_ENV === 'development') {
 
 /** GET /health → 200 */
 app.get('/health', (_req, res) => {
-  res.status(200).json({ success: true, data: { status: 'ok', corsOrigins: env.CORS_ORIGINS, nodeEnv: env.NODE_ENV } });
+  res.status(200).json({ success: true, data: { status: 'ok' } });
 });
 
 /** GET /ready → 200 if DB connected, else 503 */
