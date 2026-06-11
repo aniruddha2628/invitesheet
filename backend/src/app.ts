@@ -58,7 +58,7 @@ if (env.NODE_ENV === 'development') {
 
 /** GET /health → 200 */
 app.get('/health', (_req, res) => {
-  res.status(200).json({ success: true, data: { status: 'ok' } });
+  res.status(200).json({ success: true, data: { status: 'ok', corsOrigins: env.CORS_ORIGINS, nodeEnv: env.NODE_ENV } });
 });
 
 /** GET /ready → 200 if DB connected, else 503 */
