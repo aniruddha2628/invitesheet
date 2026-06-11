@@ -361,7 +361,8 @@ export default function Dashboard() {
             const res = await api.patch(`/events/${editingEvent.id}`, payload);
             setEvents(prev => prev.map(e => e.id === editingEvent.id ? { ...res.data.data, id: res.data.data._id } : e));
           } else {
-            const res = await api.post("/events", { ...payload, defaultColumns: ["pax", "arrival", "departure", "idType", "travel", "status"] });
+            console.log('[DEBUG] Dashboard POST /events', { eventName: ev.name, defaultColumns: ev.defaultColumns });
+            const res = await api.post("/events", { ...payload, defaultColumns: ev.defaultColumns || ["pax", "arrival", "departure", "idType", "travel", "status"] });
             setEvents(prev => [{ ...res.data.data, id: res.data.data._id }, ...prev]);
           }
           setShowModal(false);

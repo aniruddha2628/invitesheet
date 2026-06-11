@@ -108,6 +108,7 @@ export async function createEvent(
   }
 
   const defaultCols = data.defaultColumns || ['pax', 'arrival', 'departure', 'idType', 'travel', 'status'];
+  console.log('[DEBUG] event.service createEvent', { eventName: data.name, receivedDefaultColumns: data.defaultColumns, resolvedDefaultCols: defaultCols });
 
   const event = await Event.create({
     userId,
@@ -147,6 +148,7 @@ export async function createEvent(
       })
     )
   );
+  sheets.forEach(s => console.log('[DEBUG] event.service sheetCreated', { sheetName: s.name, visibleColumns: s.columnConfig?.visibleColumns }));
 
   return {
     _id: event._id,

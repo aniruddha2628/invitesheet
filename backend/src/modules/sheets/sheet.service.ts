@@ -26,6 +26,10 @@ export async function listSheets(eventId: string, userId: string, includeHidden:
     })
   );
 
+  if (sheetsWithGuests.length > 0) {
+    console.log('[DEBUG] sheet.service listSheets', { sheetName: sheetsWithGuests[0].name, visibleColumns: sheetsWithGuests[0].columnConfig?.visibleColumns });
+  }
+
   return sheetsWithGuests;
 }
 

@@ -213,7 +213,8 @@ export default function RsvpSheet({
 
   const INITIAL_RSVP_SHEETS = getInitialSheets(activeEventType);
 
-  const rsvpColumns: ColumnMeta[] = useMemo(() => [
+  // All possible RSVP columns — filtered at render time by eventDefaultColumns
+  const ALL_RSVP_COLUMNS: ColumnMeta[] = useMemo(() => [
     { field: "srNo", headerName: "Sr No", width: 60, minWidth: 60, resizable: false, editable: false, pinned: "left", locked: true },
     { field: "name", headerName: "Guest Name", width: 200, minWidth: 200, pinned: "left", locked: true },
     { field: "contact", headerName: "Contact", width: 150, minWidth: 150, locked: true },
@@ -228,6 +229,23 @@ export default function RsvpSheet({
     { field: "comments", headerName: "Comments", minWidth: 200, flex: 1, type: "text" },
   // eslint-disable-next-line react-hooks/exhaustive-deps
   ], []);
+
+  // Columns selected during event creation; null = show all (fallback for existing events)
+  const [eventDefaultColumns, setEventDefaultColumns] = useState<string[] | null>(null);
+
+  // Locked fields are always visible regardless of event column config
+  const LOCKED_FIELDS = useMemo(() => new Set(["srNo", "name", "contact", "checkIn"]), []);
+
+  const rsvpColumns: ColumnMeta[] = useMemo(() => {
+    if (!eventDefaultColumns) {
+      console.log('[DEBUG] RsvpSheet rsvpColumns', { eventDefaultColumns: null, result: 'showing ALL columns (fallback)' });
+      return ALL_RSVP_COLUMNS; // fallback: show all
+    }
+    const allowed = new Set([...eventDefaultColumns, ...LOCKED_FIELDS]);
+    const filtered = ALL_RSVP_COLUMNS.filter(c => allowed.has(c.field));
+    console.log('[DEBUG] RsvpSheet rsvpColumns', { eventDefaultColumns, allowedFields: [...allowed], visibleFields: filtered.map(c => c.field) });
+    return filtered;
+  }, [ALL_RSVP_COLUMNS, eventDefaultColumns, LOCKED_FIELDS]);
 
   const customColumns: ColumnMeta[] = useMemo(() => [
     { field: "srNo", headerName: "Sr No", width: 60, minWidth: 60, resizable: false, editable: false, pinned: "left", locked: true },
@@ -509,7 +527,23 @@ export default function RsvpSheet({
   });
   const [allHiddenColumns, setAllHiddenColumns] = useState<Record<string, string[]>>({});
 
-  const columns: ColumnMeta[] = allColumns[currentTab] ?? (isRsvpSheet ? rsvpColumns : customColumns);
+  // Sync allColumns for RSVP sheets when rsvpColumns changes after hydration
+  useEffect(() => {
+    if (!eventDefaultColumns) return;
+    setAllColumns(prev => {
+      const next = { ...prev };
+      for (const name of sheetOrder) {
+        if ((sheetTypes[name] ?? "rsvp") === "rsvp") {
+          next[name] = rsvpColumns;
+        }
+      }
+      return next;
+    });
+  }, [eventDefaultColumns, rsvpColumns, sheetOrder, sheetTypes]);
+
+  const columns: ColumnMeta[] = (isRsvpSheet && eventDefaultColumns)
+    ? rsvpColumns
+    : (allColumns[currentTab] ?? (isRsvpSheet ? rsvpColumns : customColumns));
   const hiddenColumns: string[] = allHiddenColumns[currentTab] ?? [];
 
   const setColumns = useCallback((updater: ColumnMeta[] | ((prev: ColumnMeta[]) => ColumnMeta[])) => {
@@ -571,6 +605,12 @@ export default function RsvpSheet({
           nextSheets[sheet.name] = [...guests, ...padding];
         }
       });
+      // Read column config from the first sheet to determine visible columns
+      const firstSheetCols = backendSheets[0]?.columnConfig?.visibleColumns;
+      console.log('[DEBUG] RsvpSheet hydration', { firstSheetName: backendSheets[0]?.name, firstSheetColumnConfig: backendSheets[0]?.columnConfig, firstSheetVisibleColumns: firstSheetCols });
+      if (firstSheetCols && firstSheetCols.length > 0) {
+        setEventDefaultColumns(firstSheetCols);
+      }
       const order = backendSheets.map((sheet) => sheet.name);
       setSheetIdByName(nextIds);
       setSheets(nextSheets);
@@ -1514,6 +1554,14 @@ export default function RsvpSheet({
       {/* Main Content Area */}
       <main className="flex-1 relative overflow-hidden flex flex-col">
         {viewMode === "guest" ? (
+          hasBackendEvent && !isHydrated ? (
+            <div className="flex-1 w-full bg-white flex items-center justify-center">
+              <div className="flex flex-col items-center gap-3">
+                <div className="w-6 h-6 border-2 border-gray-200 border-t-primary rounded-full animate-spin" />
+                <span className="text-sm text-gray-400 font-medium">Loading sheet…</span>
+              </div>
+            </div>
+          ) : (
           <div ref={gridWrapperRef} className="flex-1 w-full bg-white relative overflow-hidden" onContextMenu={(e) => e.preventDefault()}>
             <CleanGrid
               theme={gridTheme}
@@ -1558,6 +1606,7 @@ export default function RsvpSheet({
               </button>
             )}
           </div>
+          )
         ) : roomViewTotalGuests === 0 ? (
           <div className="flex-1 w-full bg-gray-50 flex items-center justify-center">
             <div className="flex flex-col items-center gap-3 text-center max-w-xs">

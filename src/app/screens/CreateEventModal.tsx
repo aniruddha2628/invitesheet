@@ -22,6 +22,7 @@ export interface EventItem {
   checkedIn: number;
   notComing: number;
   idsPending: number;
+  defaultColumns?: string[];
 }
 
 type Step = "details" | "columns" | "success";
@@ -103,9 +104,18 @@ export default function CreateEventModal({ open, onClose, onCreate, editEvent, p
 
   const finalize = () => {
     setStep("success");
+    // Map modal column keys to RSVP field names
+    const KEY_TO_FIELD: Record<string, string> = {
+      pax: "pax", kids: "kids", arrival: "arrival", departure: "departure",
+      room: "roomNo", ids: "idType", travel: "travel", status: "status", comments: "comments",
+    };
+    const selectedColumns = Object.entries(cols)
+      .filter(([, enabled]) => enabled)
+      .map(([key]) => KEY_TO_FIELD[key] || key);
+    console.log('[DEBUG] CreateEventModal finalize()', { selectedCols: Object.entries(cols).filter(([, v]) => v).map(([k]) => k), mappedDefaultColumns: selectedColumns });
     // Wait a bit before calling onCreate to show the success animation
     setTimeout(() => {
-      onCreate({ name, location, eventType, startDate, endDate });
+      onCreate({ name, location, eventType, startDate, endDate, defaultColumns: selectedColumns });
     }, 1500);
   };
 
