@@ -752,7 +752,41 @@ export default function RsvpSheet({
             base.cellEditor = "agNumberCellEditor";
             break;
           case "date":
-            base.cellEditor = "agDateStringCellEditor";
+            base.cellEditor = "agTextCellEditor";
+            base.valueParser = (params: any) => {
+              const v = params.newValue;
+              if (!v) return v;
+              // Already formatted (contains /) — keep as-is
+              if (v.includes("/")) return v;
+              const digits = v.replace(/\D/g, "");
+              let dd: string, mm: string, yyyy: string;
+              if (digits.length === 8) {
+                // DDMMYYYY
+                dd = digits.slice(0, 2);
+                mm = digits.slice(2, 4);
+                yyyy = digits.slice(4, 8);
+              } else if (digits.length === 7) {
+                // Try DD+M+YYYY; if day > 31 fall back to D+MM+YYYY
+                const day2 = parseInt(digits.slice(0, 2), 10);
+                if (day2 >= 1 && day2 <= 31) {
+                  dd = digits.slice(0, 2);
+                  mm = "0" + digits[2];
+                  yyyy = digits.slice(3, 7);
+                } else {
+                  dd = "0" + digits[0];
+                  mm = digits.slice(1, 3);
+                  yyyy = digits.slice(3, 7);
+                }
+              } else if (digits.length === 6) {
+                // D+M+YYYY
+                dd = "0" + digits[0];
+                mm = "0" + digits[1];
+                yyyy = digits.slice(2, 6);
+              } else {
+                return v; // Not a date pattern — keep as-is (e.g. "TBD", "Evening")
+              }
+              return `${dd}/${mm}/${yyyy}`;
+            };
             break;
         }
         return base;
@@ -1193,14 +1227,21 @@ export default function RsvpSheet({
   const roomViewTotalGuests = rsvpAggregateRows.length;
   const roomViewGuestsWithRoom = rsvpAggregateRows.filter(g => g.roomNo && g.roomNo.trim() !== "");
   const rooms = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    const filtered = q
+      ? rsvpAggregateRows.filter(g =>
+          g.name?.toLowerCase().includes(q) ||
+          g.contact?.toLowerCase().includes(q) ||
+          g.roomNo?.toLowerCase().includes(q))
+      : rsvpAggregateRows;
     const grouped: Record<string, Guest[]> = {};
-    rsvpAggregateRows.forEach(g => {
+    filtered.forEach(g => {
       const rn = g.roomNo && g.roomNo.trim() ? g.roomNo.trim() : "Unassigned";
       if (!grouped[rn]) grouped[rn] = [];
       grouped[rn].push(g);
     });
     return grouped;
-  }, [rsvpAggregateRows]);
+  }, [rsvpAggregateRows, searchQuery]);
 
   const toggleViewMode = useCallback(() => {
     setViewMode(prev => {
@@ -1493,7 +1534,7 @@ export default function RsvpSheet({
               suppressColumnVirtualisation={false}
               enterNavigatesVertically={true}
               enterNavigatesVerticallyAfterEdit={true}
-              suppressMovableColumns={false}
+              quickFilterText={searchQuery}
               enableCellTextSelection={true}
               overlayNoRowsTemplate="No guests yet — add your first guest or import a list"
               navigateToNextCell={navigateToNextCell}
