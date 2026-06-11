@@ -112,7 +112,6 @@ export default function CreateEventModal({ open, onClose, onCreate, editEvent, p
     const selectedColumns = Object.entries(cols)
       .filter(([, enabled]) => enabled)
       .map(([key]) => KEY_TO_FIELD[key] || key);
-    console.log('[DEBUG] CreateEventModal finalize()', { selectedCols: Object.entries(cols).filter(([, v]) => v).map(([k]) => k), mappedDefaultColumns: selectedColumns });
     // Wait a bit before calling onCreate to show the success animation
     setTimeout(() => {
       onCreate({ name, location, eventType, startDate, endDate, defaultColumns: selectedColumns });

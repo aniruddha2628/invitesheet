@@ -238,12 +238,10 @@ export default function RsvpSheet({
 
   const rsvpColumns: ColumnMeta[] = useMemo(() => {
     if (!eventDefaultColumns) {
-      console.log('[DEBUG] RsvpSheet rsvpColumns', { eventDefaultColumns: null, result: 'showing ALL columns (fallback)' });
       return ALL_RSVP_COLUMNS; // fallback: show all
     }
     const allowed = new Set([...eventDefaultColumns, ...LOCKED_FIELDS]);
     const filtered = ALL_RSVP_COLUMNS.filter(c => allowed.has(c.field));
-    console.log('[DEBUG] RsvpSheet rsvpColumns', { eventDefaultColumns, allowedFields: [...allowed], visibleFields: filtered.map(c => c.field) });
     return filtered;
   }, [ALL_RSVP_COLUMNS, eventDefaultColumns, LOCKED_FIELDS]);
 
@@ -308,13 +306,21 @@ export default function RsvpSheet({
   const CUSTOM_COL_KEYS = ["col1", "col2", "col3", "col4", "col5", "col6"];
   const filledForSync = useCallback((rows: Guest[]) => rows
     .filter(g => (g.name && g.name.trim()) || (g.contact && g.contact.trim()) ||
-      CUSTOM_COL_KEYS.some(k => { const v = (g as any)[k]; return v && String(v).trim(); }))
+      CUSTOM_COL_KEYS.some(k => { const v = (g as any)[k]; return v && String(v).trim(); }) ||
+      Object.keys(g).some(k => k.startsWith("custom_") && (g as any)[k] && String((g as any)[k]).trim()))
     .map((g, index) => {
       // Collect custom column values into customFields for backend storage
       const customFields: Record<string, string> = {};
       for (const k of CUSTOM_COL_KEYS) {
         const v = (g as any)[k];
         if (v != null && String(v).trim()) customFields[k] = String(v);
+      }
+      // Also collect inserted RSVP custom columns (custom_<timestamp>)
+      for (const k of Object.keys(g)) {
+        if (k.startsWith("custom_")) {
+          const v = (g as any)[k];
+          if (v != null && String(v).trim()) customFields[k] = String(v);
+        }
       }
       return {
         _id: g._id,
@@ -528,22 +534,23 @@ export default function RsvpSheet({
   const [allHiddenColumns, setAllHiddenColumns] = useState<Record<string, string[]>>({});
 
   // Sync allColumns for RSVP sheets when rsvpColumns changes after hydration
+  // Preserve any user-inserted custom columns already in allColumns
   useEffect(() => {
     if (!eventDefaultColumns) return;
     setAllColumns(prev => {
       const next = { ...prev };
       for (const name of sheetOrder) {
         if ((sheetTypes[name] ?? "rsvp") === "rsvp") {
-          next[name] = rsvpColumns;
+          const existing = prev[name] || [];
+          const customCols = existing.filter(c => c.field.startsWith("custom_"));
+          next[name] = customCols.length ? [...rsvpColumns, ...customCols] : rsvpColumns;
         }
       }
       return next;
     });
   }, [eventDefaultColumns, rsvpColumns, sheetOrder, sheetTypes]);
 
-  const columns: ColumnMeta[] = (isRsvpSheet && eventDefaultColumns)
-    ? rsvpColumns
-    : (allColumns[currentTab] ?? (isRsvpSheet ? rsvpColumns : customColumns));
+  const columns: ColumnMeta[] = allColumns[currentTab] ?? (isRsvpSheet ? rsvpColumns : customColumns);
   const hiddenColumns: string[] = allHiddenColumns[currentTab] ?? [];
 
   const setColumns = useCallback((updater: ColumnMeta[] | ((prev: ColumnMeta[]) => ColumnMeta[])) => {
@@ -607,10 +614,41 @@ export default function RsvpSheet({
       });
       // Read column config from the first sheet to determine visible columns
       const firstSheetCols = backendSheets[0]?.columnConfig?.visibleColumns;
-      console.log('[DEBUG] RsvpSheet hydration', { firstSheetName: backendSheets[0]?.name, firstSheetColumnConfig: backendSheets[0]?.columnConfig, firstSheetVisibleColumns: firstSheetCols });
       if (firstSheetCols && firstSheetCols.length > 0) {
         setEventDefaultColumns(firstSheetCols);
       }
+      // Restore custom columns, column order, and hidden columns per sheet
+      const LOCKED_SET = new Set(["srNo", "name", "contact", "checkIn"]);
+      const allowed = firstSheetCols ? new Set([...firstSheetCols, ...LOCKED_SET]) : null;
+      const baseRsvpCols = allowed ? ALL_RSVP_COLUMNS.filter(c => allowed.has(c.field)) : ALL_RSVP_COLUMNS;
+      const nextAllColumns: Record<string, ColumnMeta[]> = {};
+      const nextHiddenCols: Record<string, string[]> = {};
+      backendSheets.forEach(sheet => {
+        const isRsvp = ["Groom Side", "Bride Side", "Friends", "Sheet1"].includes(sheet.name);
+        if (!isRsvp) return;
+        const cc = sheet.columnConfig;
+        let cols = [...baseRsvpCols];
+        if (cc?.customColumns?.length) {
+          const restored: ColumnMeta[] = cc.customColumns.map((c: any) => ({
+            field: c.key,
+            headerName: c.label,
+            width: 140,
+            minWidth: 120,
+            type: (c.type === "dropdown" ? "dropdown" : "text") as any,
+            ...(c.dropdownOptions?.length ? { options: c.dropdownOptions } : {}),
+            ...(c.multiSelect !== undefined ? { allowMultiple: c.multiSelect } : {}),
+          }));
+          cols = [...cols, ...restored];
+        }
+        nextAllColumns[sheet.name] = cols;
+        if (cc?.visibleColumns && cc?.columnOrder) {
+          const visible = new Set(cc.visibleColumns);
+          const hidden = cc.columnOrder.filter((f: string) => !visible.has(f) && !LOCKED_SET.has(f));
+          if (hidden.length) nextHiddenCols[sheet.name] = hidden;
+        }
+      });
+      if (Object.keys(nextAllColumns).length) setAllColumns(prev => ({ ...prev, ...nextAllColumns }));
+      if (Object.keys(nextHiddenCols).length) setAllHiddenColumns(prev => ({ ...prev, ...nextHiddenCols }));
       const order = backendSheets.map((sheet) => sheet.name);
       setSheetIdByName(nextIds);
       setSheets(nextSheets);
@@ -1177,7 +1215,30 @@ export default function RsvpSheet({
   const unhideAllRows = () => setHiddenRows([]);
 
   // --- Column operations ---
+  // --- saveColumnConfig: persist column structure to backend ---
+  const BUILTIN_FIELDS = useMemo(() => new Set(["srNo","name","contact","checkIn","status","idType","pax","roomNo","travel","arrival","departure","comments"]), []);
+  const saveColumnConfig = useCallback((cols: ColumnMeta[], hidden: string[]) => {
+    if (!hasBackendEvent) return;
+    const sheetId = sheetIdByName[currentTab];
+    if (!sheetId) return;
+    const columnOrder = cols.map(c => c.field).filter(f => f !== "srNo");
+    const visibleColumns = columnOrder.filter(f => !hidden.includes(f));
+    const customColumns = cols
+      .filter(c => !BUILTIN_FIELDS.has(c.field))
+      .map(c => ({
+        key: c.field,
+        label: c.headerName,
+        type: (c.type === "dropdown" ? "dropdown" : "text") as "text" | "dropdown",
+        ...(c.options ? { dropdownOptions: c.options } : {}),
+        ...(c.allowMultiple !== undefined ? { multiSelect: c.allowMultiple } : {}),
+      }));
+    api.patch(`/events/${activeEventId}/sheets/${sheetId}`, {
+      columnConfig: { visibleColumns, columnOrder, customColumns }
+    }).catch(() => undefined);
+  }, [hasBackendEvent, activeEventId, currentTab, sheetIdByName, BUILTIN_FIELDS]);
+
   const insertColumn = (anchorField: string, position: "left" | "right", name: string) => {
+    let newCols: ColumnMeta[] = [];
     setColumns(prev => {
       const idx = prev.findIndex(c => c.field === anchorField);
       if (idx < 0) return prev;
@@ -1185,15 +1246,22 @@ export default function RsvpSheet({
       const newCol: ColumnMeta = { field, headerName: name.trim() || "New Column", width: 140, minWidth: 120, type: "text" };
       const next = [...prev];
       next.splice(position === "left" ? idx : idx + 1, 0, newCol);
+      newCols = next;
       return next;
     });
+    if (newCols.length) saveColumnConfig(newCols, allHiddenColumns[currentTab] ?? []);
     toast.success(`Inserted "${name}"`);
   };
 
   const deleteColumn = (field: string) => {
     if (lockedFieldSet.has(field)) return;
-    setColumns(prev => prev.filter(c => c.field !== field));
+    let newCols: ColumnMeta[] = [];
+    setColumns(prev => {
+      newCols = prev.filter(c => c.field !== field);
+      return newCols;
+    });
     setDeleteColConfirm(null);
+    if (newCols.length) saveColumnConfig(newCols, allHiddenColumns[currentTab] ?? []);
     toast.success("Column deleted");
   };
 
@@ -1204,17 +1272,29 @@ export default function RsvpSheet({
 
   const hideColumn = (field: string) => {
     if (lockedFieldSet.has(field)) return;
+    const currentCols = allColumns[currentTab] ?? [];
+    const newHidden = [...(allHiddenColumns[currentTab] ?? []), field];
     setHiddenColumns(prev => prev.includes(field) ? prev : [...prev, field]);
+    saveColumnConfig(currentCols, newHidden);
     toast.success("Column hidden");
   };
 
-  const unhideAllColumns = () => setHiddenColumns([]);
+  const unhideAllColumns = () => {
+    const currentCols = allColumns[currentTab] ?? [];
+    setHiddenColumns([]);
+    saveColumnConfig(currentCols, []);
+  };
 
   const renameColumn = (field: string, newName: string) => {
     const trimmed = newName.trim();
     if (!trimmed) return;
-    setColumns(prev => prev.map(c => c.field === field ? { ...c, headerName: trimmed } : c));
+    let newCols: ColumnMeta[] = [];
+    setColumns(prev => {
+      newCols = prev.map(c => c.field === field ? { ...c, headerName: trimmed } : c);
+      return newCols;
+    });
     setRenameColModal(null);
+    if (newCols.length) saveColumnConfig(newCols, allHiddenColumns[currentTab] ?? []);
     toast.success("Renamed");
   };
 
@@ -1223,10 +1303,15 @@ export default function RsvpSheet({
     options: string[],
     allowMultiple: boolean
   ) => {
-    setColumns(prev => prev.map(c =>
-      c.field === field ? { ...c, type: "dropdown", options, allowMultiple } : c
-    ));
+    let newCols: ColumnMeta[] = [];
+    setColumns(prev => {
+      newCols = prev.map(c =>
+        c.field === field ? { ...c, type: "dropdown", options, allowMultiple } : c
+      );
+      return newCols;
+    });
     setDropdownModal(null);
+    if (newCols.length) saveColumnConfig(newCols, allHiddenColumns[currentTab] ?? []);
     toast.success("Data validation applied");
   };
 
