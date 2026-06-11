@@ -8,6 +8,12 @@ import { emitGuestUpdated, emitGuestDeleted, emitCounterUpdated } from '../../so
  * Check if a guest row is empty (no meaningful data).
  */
 function isEmptyGuest(guest: any): boolean {
+  // Check custom fields (col1-col6 stored in customFields map)
+  const cf = guest.customFields;
+  if (cf) {
+    const values = cf instanceof Map ? Array.from(cf.values()) : Object.values(cf);
+    if (values.some((v: any) => v && String(v).trim() !== '')) return false;
+  }
   return (
     (!guest.name || guest.name.trim() === '') &&
     (!guest.contact || guest.contact.trim() === '') &&

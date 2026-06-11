@@ -265,40 +265,57 @@ export default function RsvpSheet({
     });
   }, [currentTab]);
   const hasBackendEvent = /^[a-f\d]{24}$/i.test(activeEventId);
-  const normalizeGuest = useCallback((guest: any, index: number): Guest => ({
-    _id: guest._id,
-    id: guest._id || guest.id || `${guest.sheetId || "row"}-${index}`,
-    srNo: guest.srNo ?? index + 1,
-    name: guest.name ?? "",
-    contact: guest.contact ?? "",
-    checkIn: !!guest.checkIn,
-    status: (guest.status || "") as GuestStatus,
-    idType: (guest.idType || "") as IDType,
-    pax: guest.pax ?? (null as unknown as number),
-    roomNo: guest.roomNo ?? "",
-    travel: (guest.travel || "") as TravelType,
-    arrival: guest.arrival ?? "",
-    departure: guest.departure ?? "",
-    comments: guest.comments ?? "",
-  }), []);
+  const normalizeGuest = useCallback((guest: any, index: number): Guest => {
+    // Restore custom column values (col1-col6) from customFields map
+    const cf = guest.customFields || {};
+    const customFieldsObj = cf instanceof Map ? Object.fromEntries(cf) : (typeof cf === 'object' ? cf : {});
+    return {
+      ...customFieldsObj,
+      _id: guest._id,
+      id: guest._id || guest.id || `${guest.sheetId || "row"}-${index}`,
+      srNo: guest.srNo ?? index + 1,
+      name: guest.name ?? "",
+      contact: guest.contact ?? "",
+      checkIn: !!guest.checkIn,
+      status: (guest.status || "") as GuestStatus,
+      idType: (guest.idType || "") as IDType,
+      pax: guest.pax ?? (null as unknown as number),
+      roomNo: guest.roomNo ?? "",
+      travel: (guest.travel || "") as TravelType,
+      arrival: guest.arrival ?? "",
+      departure: guest.departure ?? "",
+      comments: guest.comments ?? "",
+    } as Guest;
+  }, []);
+  const CUSTOM_COL_KEYS = ["col1", "col2", "col3", "col4", "col5", "col6"];
   const filledForSync = useCallback((rows: Guest[]) => rows
-    .filter(g => (g.name && g.name.trim()) || (g.contact && g.contact.trim()))
-    .map((g, index) => ({
-      _id: g._id,
-      id: g._id,
-      srNo: index + 1,
-      name: g.name || "",
-      contact: g.contact || "",
-      checkIn: !!g.checkIn,
-      status: g.status || "Pending",
-      idType: g.idType || "Pending",
-      pax: g.pax || 1,
-      roomNo: g.roomNo || "",
-      travel: g.travel || "Not Decided",
-      arrival: g.arrival || "",
-      departure: g.departure || "",
-      comments: g.comments || "",
-    })), []);
+    .filter(g => (g.name && g.name.trim()) || (g.contact && g.contact.trim()) ||
+      CUSTOM_COL_KEYS.some(k => { const v = (g as any)[k]; return v && String(v).trim(); }))
+    .map((g, index) => {
+      // Collect custom column values into customFields for backend storage
+      const customFields: Record<string, string> = {};
+      for (const k of CUSTOM_COL_KEYS) {
+        const v = (g as any)[k];
+        if (v != null && String(v).trim()) customFields[k] = String(v);
+      }
+      return {
+        _id: g._id,
+        id: g._id,
+        srNo: index + 1,
+        name: g.name || "",
+        contact: g.contact || "",
+        checkIn: !!g.checkIn,
+        status: g.status || "Pending",
+        idType: g.idType || "Pending",
+        pax: g.pax || 1,
+        roomNo: g.roomNo || "",
+        travel: g.travel || "Not Decided",
+        arrival: g.arrival || "",
+        departure: g.departure || "",
+        comments: g.comments || "",
+        customFields,
+      };
+    }), []);
   const openAddSheet = useCallback(() => {
     setAddSheetName("");
   }, []);
@@ -544,7 +561,15 @@ export default function RsvpSheet({
         nextTypes[sheet.name] = ["Groom Side", "Bride Side", "Friends", "Sheet1"].includes(sheet.name) ? "rsvp" : "custom";
         if (sheet.isHidden) nextHidden.push(sheet.name);
         const guests = (sheet.guests || []).map(normalizeGuest);
-        nextSheets[sheet.name] = guests.length > 0 ? guests : makeBlankSheet(sheet.name.toLowerCase().replace(/\s/g, "-"));
+        const prefix = sheet.name.toLowerCase().replace(/\s/g, "-");
+        const MIN_ROWS = 50;
+        if (guests.length >= MIN_ROWS) {
+          nextSheets[sheet.name] = guests;
+        } else {
+          // Pad with blank rows to maintain spreadsheet appearance
+          const padding = makeBlankSheet(prefix).slice(0, MIN_ROWS - guests.length);
+          nextSheets[sheet.name] = [...guests, ...padding];
+        }
       });
       const order = backendSheets.map((sheet) => sheet.name);
       setSheetIdByName(nextIds);
@@ -562,19 +587,30 @@ export default function RsvpSheet({
     };
   }, [activeEventId, hasBackendEvent, normalizeGuest]);
 
+  // Skip the first sync after hydration to avoid re-sending loaded data
+  const syncSkipRef = useRef(true);
+
   useEffect(() => {
     if (!isHydrated || !hasBackendEvent) return;
-    const sheetId = sheetIdByName[currentTab];
-    if (!sheetId) return;
-    const rows = filledForSync(rowData);
+    if (syncSkipRef.current) {
+      syncSkipRef.current = false;
+      return;
+    }
     const t = window.setTimeout(() => {
-      api.post(`/events/${activeEventId}/sheets/${sheetId}/guests/bulk`, {
-        operation: "replace",
-        guests: rows,
-      }).catch(() => undefined);
+      // Sync ALL sheets, not just the active tab
+      for (const name of sheetOrder) {
+        const sheetId = sheetIdByName[name];
+        const data = sheets[name];
+        if (!sheetId || !data) continue;
+        const rows = filledForSync(data);
+        api.post(`/events/${activeEventId}/sheets/${sheetId}/guests/bulk`, {
+          operation: "replace",
+          guests: rows,
+        }).catch(() => undefined);
+      }
     }, 800);
     return () => window.clearTimeout(t);
-  }, [activeEventId, currentTab, filledForSync, hasBackendEvent, isHydrated, rowData, sheetIdByName]);
+  }, [activeEventId, sheets, filledForSync, hasBackendEvent, isHydrated, sheetIdByName, sheetOrder]);
 
   const visibleRowData = useMemo(
     () => rowData.filter(r => !hiddenRows.includes(r.id)),
